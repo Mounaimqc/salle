@@ -17,9 +17,9 @@ const firebaseConfig = {
   measurementId: "G-EHTY4JHS44"
 };
 
-const app = initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-
+// Arabic comment removed 
