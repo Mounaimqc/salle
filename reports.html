@@ -1,137 +1,125 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SallePro - Rapports Financiers</title>
-  <!-- Font Awesome & Style Imports -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="css/responsive.css">
-  <!-- Chart.js CDN -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SallePro – Rapports & Bilans</title>
+  <meta name="description" content="Rapports analytiques et bilans financiers de SallePro." />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/responsive.css" />
+  <!-- Chart.js (non-module, global CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
-  <div class="app-container" id="app-root">
-    
-    <!-- Sidebar -->
-    <div id="sidebar-container"></div>
-    
-    <!-- Main Content -->
-    <div class="main-content">
-      
-      <!-- Navbar -->
-      <div id="navbar-container"></div>
-      
-      <!-- Content Wrapper -->
-      <main class="content-wrapper">
-        
-        <!-- Header Section -->
-        <div class="section-header no-print">
-          <div class="section-title">
-            <h2>Rapports & Bilans</h2>
-            <p>Analysez la rentabilité de votre activité, téléchargez vos bilans et exportez les données.</p>
-          </div>
-          
-          <div style="display: flex; gap: 10px;">
-            <button class="btn btn-outline" id="export-csv-btn">
-              <i class="fa-solid fa-file-excel"></i> Exporter Excel / CSV
-            </button>
-            <button class="btn btn-secondary" onclick="window.print()">
-              <i class="fa-solid fa-print"></i> Imprimer Rapport
-            </button>
+  <!-- Loading Overlay -->
+  <div class="loader-overlay" id="loading-overlay"><div class="spinner"></div></div>
+
+  <div class="app-container" id="app-container" style="display:none;">
+    <!-- Sidebar injected by app.js -->
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="main-content" id="main-content">
+      <!-- Section Header -->
+      <div class="section-header">
+        <div class="section-header-left">
+          <h1 class="section-title"><i class="fa-solid fa-chart-line"></i> Rapports & Bilans</h1>
+          <p class="section-subtitle">Analysez la performance financière annuelle de votre salle.</p>
+        </div>
+        <div class="section-header-actions">
+          <button class="btn btn-outline" id="export-csv-btn">
+            <i class="fa-solid fa-file-csv"></i> Exporter CSV
+          </button>
+          <button class="btn btn-outline" id="print-report-btn" onclick="window.print()">
+            <i class="fa-solid fa-print"></i> Imprimer
+          </button>
+        </div>
+      </div>
+
+      <!-- Year Filter Card -->
+      <div class="card filter-card" style="margin-bottom:24px;">
+        <div class="card-body" style="display:flex;align-items:center;gap:16px;">
+          <label class="form-label" style="margin:0;white-space:nowrap;"><i class="fa-solid fa-calendar-year"></i> Année :</label>
+          <select class="form-control" id="report-year" style="width:auto;">
+            <option value="2026" selected>2026</option>
+            <option value="2025">2025</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- KPI Cards Row -->
+      <div class="kpi-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:24px;">
+        <!-- Revenue KPI -->
+        <div class="card kpi-card" id="report-kpi-revenue">
+          <div class="card-body kpi-card-body">
+            <div class="kpi-icon kpi-icon-success"><i class="fa-solid fa-arrow-trend-up"></i></div>
+            <div class="kpi-info">
+              <p class="kpi-label">Revenus Totaux</p>
+              <p class="kpi-value" id="report-kpi-revenue-val">—</p>
+            </div>
           </div>
         </div>
-
-        <!-- Filter Bar -->
-        <section class="card no-print" style="margin-bottom: 30px; padding: 20px;">
-          <div style="display: flex; align-items: center; gap: 15px;">
-            <span style="font-weight: 600; color: var(--text-muted);"><i class="fa-solid fa-filter"></i> Exercice comptable (Année) :</span>
-            <select class="form-control" id="report-year" style="max-width: 150px;">
-              <option value="2026" selected>2026</option>
-              <option value="2025">2025</option>
-            </select>
-          </div>
-        </section>
-
-        <!-- Printable Report Header (hidden in screen, visible in print) -->
-        <div class="print-only" style="display: none; text-align: center; margin-bottom: 40px; border-bottom: 2px solid #000; padding-bottom: 20px;">
-          <h1 style="font-size: 2.2rem; font-weight: 800;" id="print-hall-name">SallePro</h1>
-          <p id="print-hall-meta">Bilan Financier Annuel - Exercice <span id="print-year-label">2026</span></p>
-          <p style="font-size: 0.8rem; color: #555; margin-top: 6px;">Généré automatiquement par SallePro le 30 Juin 2026</p>
-        </div>
-
-        <!-- Financial Summary Cards -->
-        <div class="grid-container grid-cols-3" style="margin-bottom: 30px;">
-          <!-- Revenue Card -->
-          <div class="card" style="border-left: 5px solid var(--success);">
-            <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Recettes globales (Revenus encaissés)</span>
-            <div style="font-size: 2.2rem; font-weight: 800; color: var(--success); margin: 10px 0 6px;" id="report-kpi-revenue">0.00 €</div>
-            <p style="font-size: 0.75rem; color: var(--text-light);" id="report-kpi-revenue-desc">Somme des paiements perçus (Acomptes + Solderies)</p>
-          </div>
-
-          <!-- Expenses Card -->
-          <div class="card" style="border-left: 5px solid var(--danger);">
-            <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Charges globales (Charges + Salaires)</span>
-            <div style="font-size: 2.2rem; font-weight: 800; color: var(--danger); margin: 10px 0 6px;" id="report-kpi-expenses">0.00 €</div>
-            <p style="font-size: 0.75rem; color: var(--text-light);">Frais généraux d'exploitation, salaires inclus</p>
-          </div>
-
-          <!-- Profit Card -->
-          <div class="card" id="report-profit-card" style="border-left: 5px solid var(--color-secondary);">
-            <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Bénéfice Net estimé</span>
-            <div style="font-size: 2.2rem; font-weight: 800; margin: 10px 0 6px;" id="report-kpi-profit">0.00 €</div>
-            <p style="font-size: 0.75rem; color: var(--text-light);" id="report-kpi-profit-desc">Solde financier après déduction des charges</p>
+        <!-- Expenses KPI -->
+        <div class="card kpi-card" id="report-kpi-expenses">
+          <div class="card-body kpi-card-body">
+            <div class="kpi-icon kpi-icon-danger"><i class="fa-solid fa-arrow-trend-down"></i></div>
+            <div class="kpi-info">
+              <p class="kpi-label">Total Dépenses</p>
+              <p class="kpi-value" id="report-kpi-expenses-val">—</p>
+            </div>
           </div>
         </div>
-
-        <!-- Profit Trend Chart -->
-        <section class="card no-print" style="margin-bottom: 30px;">
-          <div class="card-title-area">
-            <h3 class="card-title">Courbe de Rentabilité Mensuelle</h3>
-            <span style="font-size:0.85rem; color:var(--text-muted);">Vue graphique de la balance nette</span>
+        <!-- Profit KPI -->
+        <div class="card kpi-card" id="report-kpi-profit">
+          <div class="card-body kpi-card-body">
+            <div class="kpi-icon kpi-icon-primary"><i class="fa-solid fa-sack-dollar"></i></div>
+            <div class="kpi-info">
+              <p class="kpi-label">Bénéfice Net</p>
+              <p class="kpi-value" id="report-kpi-profit-val">—</p>
+            </div>
           </div>
-          <div class="chart-wrapper" style="height: 280px;">
-            <canvas id="profitReportChart"></canvas>
-          </div>
-        </section>
+        </div>
+      </div>
 
-        <!-- Annual Breakdown Table -->
-        <section class="card" style="padding: 0; overflow: hidden;">
-          <div class="card-title-area" style="padding: 24px 30px; margin-bottom: 0; border-bottom: 1px solid var(--border-color);">
-            <h3 class="card-title">Tableau de Synthèse Mensuel</h3>
-            <span class="no-print" style="font-size: 0.8rem; color: var(--text-muted);"><i class="fa-solid fa-info-circle"></i> Double-cliquez pour imprimer</span>
-          </div>
+      <!-- Profit Chart Card -->
+      <div class="card" style="margin-bottom:24px;">
+        <div class="card-header">
+          <h3 class="card-title"><i class="fa-solid fa-chart-bar"></i> Évolution Mensuelle</h3>
+        </div>
+        <div class="card-body" style="position:relative;height:320px;">
+          <canvas id="profitReportChart"></canvas>
+        </div>
+      </div>
 
-          <div class="table-responsive" style="border: none;">
-            <table class="table-premium">
-              <thead>
-                <tr>
-                  <th>Mois</th>
-                  <th>Revenus</th>
-                  <th>Charges Générale</th>
-                  <th>Salaires versés</th>
-                  <th>Masse Totale Dépensée</th>
-                  <th>Bénéfice Net</th>
-                  <th>Marge Net %</th>
-                </tr>
-              </thead>
-              <tbody id="reports-table-body">
-                <!-- Generated dynamically in reports.js -->
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-      </main>
-      
-    </div>
+      <!-- Monthly Data Table -->
+      <div class="card table-card">
+        <div class="card-header">
+          <h3 class="card-title"><i class="fa-solid fa-table"></i> Détail Mensuel</h3>
+        </div>
+        <div class="card-body table-responsive">
+          <table class="table table-premium" id="reports-table">
+            <thead>
+              <tr>
+                <th>Mois</th>
+                <th>Revenus</th>
+                <th>Charges Générales</th>
+                <th>Salaires</th>
+                <th>Total Dépenses</th>
+                <th>Bénéfice Net</th>
+                <th>Marge %</th>
+              </tr>
+            </thead>
+            <tbody id="reports-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
   </div>
 
-  <!-- Shared App Logic -->
-  <script src="js/app.js"></script>
-  <!-- Reports Logic -->
-  <script src="js/reports.js"></script>
+  <!-- Scripts -->
+  <script type="module" src="js/auth.js"></script>
+  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/reports.js"></script>
 </body>
 </html>
