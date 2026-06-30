@@ -589,7 +589,7 @@ button, input, select, textarea {
 }
 
 /* Modals */
-.modal-backdrop {
+.modal-backdrop, .modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -598,20 +598,19 @@ button, input, select, textarea {
   background-color: rgba(15, 23, 42, 0.4);
   backdrop-filter: blur(8px);
   z-index: 1000;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  pointer-events: none;
   transition: opacity 0.3s ease;
 }
 
-.modal-backdrop.open {
+.modal-backdrop.open, .modal-overlay.open {
+  display: flex !important;
   opacity: 1;
-  pointer-events: all;
 }
 
-.modal-card {
+.modal-card, .modal {
   background-color: var(--bg-surface);
   border-radius: var(--radius-lg);
   width: 90%;
@@ -626,7 +625,7 @@ button, input, select, textarea {
   overflow: hidden;
 }
 
-.modal-backdrop.open .modal-card {
+.modal-backdrop.open .modal-card, .modal-overlay.open .modal {
   transform: scale(1);
 }
 
@@ -645,7 +644,7 @@ button, input, select, textarea {
   letter-spacing: -0.3px;
 }
 
-.close-modal-btn {
+.close-modal-btn, .modal-close {
   background: none;
   border: none;
   font-size: 1.25rem;
@@ -654,7 +653,7 @@ button, input, select, textarea {
   transition: var(--transition-fast);
 }
 
-.close-modal-btn:hover {
+.close-modal-btn:hover, .modal-close:hover {
   color: var(--danger);
 }
 

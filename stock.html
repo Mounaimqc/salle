@@ -21,6 +21,48 @@
     .stock-card-title{font-size:0.95rem;font-weight:700;color:var(--text-main);}
     .stock-card-actions{border-top:1px solid var(--border-color);padding:10px 16px;display:flex;gap:8px;background-color:var(--bg-surface-hover);}
   </style>
+
+  <!-- Global Error Logger -->
+  <script>
+    window.addEventListener('error', function(e) {
+      console.error("Global Error Intercepted:", e);
+      var errOverlay = document.getElementById('global-error-overlay');
+      if (!errOverlay) {
+        errOverlay = document.createElement('div');
+        errOverlay.id = 'global-error-overlay';
+        errOverlay.style = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.95);color:#be123c;padding:40px;z-index:999999;font-family:monospace;overflow:auto;box-sizing:border-box;';
+        document.body.appendChild(errOverlay);
+      }
+      errOverlay.innerHTML = '<h2>Erreur Critique de l\'Application</h2>' +
+        '<p>L\'application a planté lors de l\'initialisation. Détails techniques :</p>' +
+        '<pre style="background:#f1f5f9;padding:15px;border-radius:6px;border:1px solid #cbd5e1;color:#334155;margin-top:15px;">' +
+        e.message + '\n\nFichier: ' + e.filename + '\nLigne: ' + e.lineno + ', Col: ' + e.colno + '\n\n' +
+        (e.error ? (e.error.stack || '') : '') + '</pre>' +
+        '<button onclick="window.location.reload()" style="background:#be123c;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-weight:600;cursor:pointer;margin-top:15px;">Recharger la page</button>';
+      
+      // Dismiss loading overlay if present
+      var loader = document.getElementById('loading-overlay');
+      if (loader) loader.remove();
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      console.error("Global Promise Rejection Intercepted:", e);
+      var errOverlay = document.getElementById('global-error-overlay');
+      if (!errOverlay) {
+        errOverlay = document.createElement('div');
+        errOverlay.id = 'global-error-overlay';
+        errOverlay.style = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.95);color:#be123c;padding:40px;z-index:999999;font-family:monospace;overflow:auto;box-sizing:border-box;';
+        document.body.appendChild(errOverlay);
+      }
+      errOverlay.innerHTML = '<h2>Rejet de Promesse Non Géré</h2>' +
+        '<p>Une opération asynchrone a échoué. Détails :</p>' +
+        '<pre style="background:#f1f5f9;padding:15px;border-radius:6px;border:1px solid #cbd5e1;color:#334155;margin-top:15px;">' +
+        e.reason + '\n\n' + (e.reason && e.reason.stack ? e.reason.stack : '') + '</pre>' +
+        '<button onclick="window.location.reload()" style="background:#be123c;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-weight:600;cursor:pointer;margin-top:15px;">Recharger la page</button>';
+      
+      var loader = document.getElementById('loading-overlay');
+      if (loader) loader.remove();
+    });
+  </script>
 </head>
 <body>
 

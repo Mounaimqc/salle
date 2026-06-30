@@ -83,7 +83,7 @@ async function initializeAppShell() {
  * Render Sidebar and Top Navbar Markup
  */
 function renderLayoutShell() {
-  const sidebarContainer = document.getElementById('sidebar-container');
+  const sidebarContainer = document.getElementById('sidebar-container') || document.getElementById('sidebar');
   const navbarContainer = document.getElementById('navbar-container');
 
   if (!sidebarContainer && !navbarContainer) {
@@ -96,8 +96,8 @@ function renderLayoutShell() {
 
   // 1. Render Sidebar
   if (sidebarContainer) {
-    sidebarContainer.innerHTML = `
-      <aside class="sidebar">
+    const isSidebarTag = sidebarContainer.tagName.toLowerCase() === 'aside';
+    const sidebarContent = `
         <div class="sidebar-logo-area">
           <a href="index.html" class="logo-link">
             <i class="fa-solid fa-gem logo-icon-gold"></i>
@@ -152,8 +152,13 @@ function renderLayoutShell() {
             <span class="footer-role" id="sidebar-user-role">-</span>
           </div>
         </div>
-      </aside>
     `;
+
+    if (isSidebarTag) {
+      sidebarContainer.innerHTML = sidebarContent;
+    } else {
+      sidebarContainer.innerHTML = `<aside class="sidebar">${sidebarContent}</aside>`;
+    }
 
     const logoutBtn = document.getElementById('sidebar-logout-btn');
     if (logoutBtn) {
