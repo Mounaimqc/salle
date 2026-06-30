@@ -1,48 +1,87 @@
 /**
- * SallePro - Reports Page Logic
+ * SallePro - Reports Page Logic (Firebase Firestore Module)
  */
 
+import { db } from "./firebase.js";
+import { showToast, currentCurrencySymbol } from "./app.js";
+import {
+  collection, onSnapshot, doc
+} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
 let profitChart = null;
+let allReservations = [];
+let allExpenses = [];
+let currentSettings = {};
 
 document.addEventListener('DOMContentLoaded', () => {
-  renderReports();
+  initReportsPage();
 
   // Bind dropdown filter
-  document.getElementById('report-year').addEventListener('change', () => {
+  document.getElementById('report-year')?.addEventListener('change', () => {
     renderReports();
     showToast('Bilan actualisé', 'Affichage des données comptables de l\'exercice choisi.', 'info');
   });
 
   // Bind Export CSV button
-  document.getElementById('export-csv-btn').onclick = exportToCSV;
+  const exportBtn = document.getElementById('export-csv-btn');
+  if (exportBtn) exportBtn.onclick = exportToCSV;
 
   // Watch theme changes to refresh chart colors
-  window.addEventListener('themeChanged', () => {
+  window.addEventListener('spSettingsUpdated', () => {
     renderReports();
   });
 });
+
+function initReportsPage() {
+  listenToSettings();
+  listenToReservations();
+  listenToExpenses();
+}
+
+function listenToSettings() {
+  onSnapshot(doc(db, "settings", "hall_settings"), (docSnap) => {
+    if (docSnap.exists()) {
+      currentSettings = docSnap.data();
+      renderReports();
+    }
+  });
+}
+
+function listenToReservations() {
+  onSnapshot(collection(db, "reservations"), (snapshot) => {
+    allReservations = [];
+    snapshot.forEach(d => allReservations.push({ id: d.id, ...d.data() }));
+    renderReports();
+  });
+}
+
+function listenToExpenses() {
+  onSnapshot(collection(db, "charges"), (snapshot) => {
+    allExpenses = [];
+    snapshot.forEach(d => allExpenses.push({ id: d.id, ...d.data() }));
+    renderReports();
+  });
+}
 
 /**
  * Main Reports Compiler
  */
 function renderReports() {
   const yearSelect = document.getElementById('report-year');
+  if (!yearSelect) return;
   const year = yearSelect.value;
 
-  const reservations = db.getTable('reservations');
-  const expenses = db.getTable('expenses');
-  const settings = db.getTable('settings');
-  const currency = settings.currency || '€';
+  const currency = currentCurrencySymbol || currentSettings.currency || '€';
 
   // Update print header
   const printYearLabel = document.getElementById('print-year-label');
   if (printYearLabel) printYearLabel.innerText = year;
 
   const printHallName = document.getElementById('print-hall-name');
-  if (printHallName) printHallName.innerText = settings.hallName;
+  if (printHallName) printHallName.innerText = currentSettings.hallName || 'SallePro';
 
   const printHallMeta = document.getElementById('print-hall-meta');
-  if (printHallMeta) printHallMeta.innerText = `Bilan Financier Annuel - Exercice ${year} | ${settings.address}`;
+  if (printHallMeta) printHallMeta.innerText = `Bilan Financier Annuel - Exercice ${year} | ${currentSettings.address || ''}`;
 
   // Monthly values arrays
   const monthsNames = [
@@ -60,18 +99,18 @@ function renderReports() {
     const monthPrefix = `${year}-${String(m + 1).padStart(2, '0')}`;
 
     // 1. Revenues (actual paid parts of confirmed bookings)
-    revenues[m] = reservations
-      .filter(r => r.status === 'Confirmé' && r.eventDate.startsWith(monthPrefix))
-      .reduce((sum, r) => sum + (r.totalAmount - r.remainingAmount), 0);
+    revenues[m] = allReservations
+      .filter(r => r.status === 'Confirmé' && r.eventDate && r.eventDate.startsWith(monthPrefix))
+      .reduce((sum, r) => sum + ((r.totalAmount || 0) - (r.remainingAmount || 0)), 0);
 
     // 2. Expenses (separate General Charges from Salaries)
-    generalCharges[m] = expenses
-      .filter(e => e.date.startsWith(monthPrefix) && e.category !== 'Salaires')
-      .reduce((sum, e) => sum + e.amount, 0);
+    generalCharges[m] = allExpenses
+      .filter(e => e.date && e.date.startsWith(monthPrefix) && e.category !== 'Salaires')
+      .reduce((sum, e) => sum + (e.amount || 0), 0);
 
-    salaries[m] = expenses
-      .filter(e => e.date.startsWith(monthPrefix) && e.category === 'Salaires')
-      .reduce((sum, e) => sum + e.amount, 0);
+    salaries[m] = allExpenses
+      .filter(e => e.date && e.date.startsWith(monthPrefix) && e.category === 'Salaires')
+      .reduce((sum, e) => sum + (e.amount || 0), 0);
 
     // Net Profit
     netProfits[m] = revenues[m] - (generalCharges[m] + salaries[m]);
@@ -121,23 +160,26 @@ function renderReports() {
   const totalYearProfit = totalYearRevenue - totalYearExpenses;
 
   // Render top cards
-  document.getElementById('report-kpi-revenue').innerText = `${totalYearRevenue.toLocaleString()} ${currency}`;
-  document.getElementById('report-kpi-expenses').innerText = `${totalYearExpenses.toLocaleString()} ${currency}`;
-  
+  const revenueEl = document.getElementById('report-kpi-revenue');
+  const expensesEl = document.getElementById('report-kpi-expenses');
   const profitKpi = document.getElementById('report-kpi-profit');
   const profitCard = document.getElementById('report-profit-card');
   const profitDesc = document.getElementById('report-kpi-profit-desc');
 
-  profitKpi.innerText = `${totalYearProfit.toLocaleString()} ${currency}`;
+  if (revenueEl) revenueEl.innerText = `${totalYearRevenue.toLocaleString()} ${currency}`;
+  if (expensesEl) expensesEl.innerText = `${totalYearExpenses.toLocaleString()} ${currency}`;
   
-  if (totalYearProfit >= 0) {
-    profitKpi.style.color = 'var(--success)';
-    profitCard.style.borderLeftColor = 'var(--success)';
-    profitDesc.innerText = 'Bilan annuel positif (Excédent financier)';
-  } else {
-    profitKpi.style.color = 'var(--danger)';
-    profitCard.style.borderLeftColor = 'var(--danger)';
-    profitDesc.innerText = 'Bilan annuel négatif (Déficit financier)';
+  if (profitKpi) {
+    profitKpi.innerText = `${totalYearProfit.toLocaleString()} ${currency}`;
+    if (totalYearProfit >= 0) {
+      profitKpi.style.color = 'var(--success)';
+      if (profitCard) profitCard.style.borderLeftColor = 'var(--success)';
+      if (profitDesc) profitDesc.innerText = 'Bilan annuel positif (Excédent financier)';
+    } else {
+      profitKpi.style.color = 'var(--danger)';
+      if (profitCard) profitCard.style.borderLeftColor = 'var(--danger)';
+      if (profitDesc) profitDesc.innerText = 'Bilan annuel négatif (Déficit financier)';
+    }
   }
 
   // Load chart
@@ -198,7 +240,9 @@ function renderProfitReportChart(labels, data, currency) {
  * Export report structure as CSV file
  */
 function exportToCSV() {
-  const year = document.getElementById('report-year').value;
+  const yearSelect = document.getElementById('report-year');
+  if (!yearSelect) return;
+  const year = yearSelect.value;
   const tbody = document.getElementById('reports-table-body');
   if (!tbody) return;
 
@@ -207,7 +251,7 @@ function exportToCSV() {
 
   rows.forEach(tr => {
     const cols = tr.querySelectorAll('td');
-    const rowContent = Array.from(cols).map(td => td.innerText.replace(/[\s€]/g, '')).join(';');
+    const rowContent = Array.from(cols).map(td => td.innerText.replace(/[\s€$]/g, '')).join(';');
     csvContent += rowContent + '\r\n';
   });
 

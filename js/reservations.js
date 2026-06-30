@@ -11,6 +11,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
 let allReservations = [];
+let allClients = [];
 let editingId = null;
 let currentSettings = {};
 
@@ -24,6 +25,7 @@ window.addEventListener('spSettingsUpdated', (e) => {
 
 function initReservationsPage() {
   listenToReservations();
+  listenToClients();
   bindUIEvents();
   checkQueryParams();
 }
@@ -38,14 +40,46 @@ function listenToReservations() {
   }, err => showToast('Erreur', err.message, 'danger'));
 }
 
+function listenToClients() {
+  onSnapshot(collection(db, "clients"), (snapshot) => {
+    allClients = [];
+    snapshot.forEach(d => allClients.push({ id: d.id, ...d.data() }));
+    populateClientsDropdown();
+  }, err => console.error("Error listening to clients:", err));
+}
+
+function populateClientsDropdown() {
+  const select = document.getElementById('booking-client-name');
+  if (!select) return;
+  const currentValue = select.value;
+  select.innerHTML = '<option value="">-- Sélectionner un client --</option>';
+  const sortedClients = [...allClients].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  sortedClients.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.name;
+    opt.dataset.phone = c.phone || '';
+    opt.innerText = `${c.name} (${c.phone || 'Pas de tél.'})`;
+    select.appendChild(opt);
+  });
+  select.value = currentValue;
+}
+
 // ─── UI Event Bindings ─────────────────────────────────────────────────────
 function bindUIEvents() {
   document.getElementById('open-add-modal-btn').addEventListener('click', () => openModal());
 
-  document.getElementById('close-modal-btn')?.addEventListener('click', closeModal);
-  document.getElementById('cancel-modal-btn')?.addEventListener('click', closeModal);
+  document.getElementById('close-booking-modal')?.addEventListener('click', closeModal);
+  document.getElementById('cancel-booking-btn')?.addEventListener('click', closeModal);
 
   document.getElementById('booking-form').addEventListener('submit', handleFormSubmit);
+
+  // Auto-fill phone on client selection
+  const clientSelect = document.getElementById('booking-client-name');
+  const phoneInput = document.getElementById('booking-client-phone');
+  clientSelect?.addEventListener('change', () => {
+    const selectedOption = clientSelect.options[clientSelect.selectedIndex];
+    phoneInput.value = selectedOption?.dataset.phone || '';
+  });
 
   // Auto-calculate remaining
   const total = document.getElementById('booking-total');
@@ -78,9 +112,9 @@ function bindUIEvents() {
   });
 
   // Receipt modal close
-  document.getElementById('close-receipt-modal-btn')?.addEventListener('click', () => {
-    document.getElementById('receipt-modal')?.classList.remove('open');
-  });
+  const closeReceipt = () => document.getElementById('receipt-modal')?.classList.remove('open');
+  document.getElementById('close-receipt-modal')?.addEventListener('click', closeReceipt);
+  document.getElementById('close-receipt-btn')?.addEventListener('click', closeReceipt);
 }
 
 function checkQueryParams() {
@@ -181,7 +215,7 @@ function renderTable() {
 function openModal(reservationId = null) {
   editingId = reservationId;
   const modal = document.getElementById('booking-modal');
-  const title = document.getElementById('modal-title-label');
+  const title = document.getElementById('booking-modal-title');
   const form = document.getElementById('booking-form');
   form.reset();
   document.getElementById('booking-remaining').value = 0;

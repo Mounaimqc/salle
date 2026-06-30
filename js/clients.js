@@ -48,7 +48,7 @@ function listenToReservations() {
 // ─── UI Events ─────────────────────────────────────────────────────────────
 function bindUIEvents() {
   document.getElementById('open-add-client-btn')?.addEventListener('click', () => openModal());
-  document.getElementById('close-client-modal-btn')?.addEventListener('click', closeModal);
+  document.getElementById('close-client-modal')?.addEventListener('click', closeModal);
   document.getElementById('cancel-client-btn')?.addEventListener('click', closeModal);
   document.getElementById('client-form')?.addEventListener('submit', handleFormSubmit);
   document.getElementById('search-clients')?.addEventListener('input', renderTable);

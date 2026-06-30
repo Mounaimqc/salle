@@ -1,84 +1,108 @@
 /**
- * SallePro - Charges Page Logic
+ * SallePro - Charges Page Logic (Firebase Firestore Module)
  */
 
+import { db } from "./firebase.js";
+import { showToast, currentCurrencySymbol } from "./app.js";
+import {
+  collection, query, orderBy, onSnapshot,
+  addDoc, updateDoc, deleteDoc, doc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
 let chargesChart = null;
+let allExpenses = [];
+let editingId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
-  renderExpensesTable();
+  listenToExpenses();
 
   // Modal event bindings
   const modal = document.getElementById('expense-modal');
   const addBtn = document.getElementById('open-add-expense-btn');
-  const closeBtn = document.getElementById('close-expense-modal-btn');
+  const closeBtn = document.getElementById('close-expense-modal');
   const cancelBtn = document.getElementById('cancel-expense-btn');
   const form = document.getElementById('expense-form');
 
-  addBtn.onclick = () => openExpenseModal();
-  closeBtn.onclick = () => closeModal();
-  cancelBtn.onclick = () => closeModal();
+  if (addBtn) addBtn.onclick = () => openExpenseModal();
+  if (closeBtn) closeBtn.onclick = () => closeModal();
+  if (cancelBtn) cancelBtn.onclick = () => closeModal();
 
-  form.addEventListener('submit', handleFormSubmit);
+  form?.addEventListener('submit', handleFormSubmit);
 
   // Search & Filter event bindings
-  document.getElementById('search-expenses').addEventListener('input', renderExpensesTable);
-  document.getElementById('filter-expense-category').addEventListener('change', renderExpensesTable);
-  document.getElementById('filter-expense-month').addEventListener('change', renderExpensesTable);
+  document.getElementById('search-expenses')?.addEventListener('input', renderExpensesTable);
+  document.getElementById('filter-expense-category')?.addEventListener('change', renderExpensesTable);
+  document.getElementById('filter-expense-month')?.addEventListener('change', renderExpensesTable);
 
   // Watch theme changes to refresh chart colors
-  window.addEventListener('themeChanged', () => {
-    updateExpensesAnalytics();
+  window.addEventListener('spSettingsUpdated', () => {
+    renderExpensesTable();
   });
 });
+
+/**
+ * Real-time Firestore listener for expenses
+ */
+function listenToExpenses() {
+  const q = query(collection(db, "charges"), orderBy("date", "desc"));
+  onSnapshot(q, (snapshot) => {
+    allExpenses = [];
+    snapshot.forEach(d => allExpenses.push({ id: d.id, ...d.data() }));
+    renderExpensesTable();
+  }, err => showToast('Erreur', err.message, 'danger'));
+}
 
 /**
  * Open Modal Form
  */
 function openExpenseModal(expenseId = null) {
+  editingId = expenseId;
   const modal = document.getElementById('expense-modal');
   const title = document.getElementById('expense-modal-title');
   const form = document.getElementById('expense-form');
 
-  form.reset();
+  form?.reset();
 
   if (expenseId) {
-    title.innerText = 'Modifier la Charge';
-    const exp = db.getOne('expenses', expenseId);
+    if (title) title.innerText = 'Modifier la Charge';
+    const exp = allExpenses.find(e => e.id === expenseId);
     if (exp) {
       document.getElementById('expense-id').value = exp.id;
-      document.getElementById('expense-date').value = exp.date;
-      document.getElementById('expense-category').value = exp.category;
-      document.getElementById('expense-amount').value = exp.amount;
-      document.getElementById('expense-desc').value = exp.description;
+      document.getElementById('expense-date').value = exp.date || '';
+      document.getElementById('expense-category').value = exp.category || '';
+      document.getElementById('expense-amount').value = exp.amount || 0;
+      document.getElementById('expense-desc').value = exp.description || '';
     }
   } else {
-    title.innerText = 'Enregistrer une Charge';
+    if (title) title.innerText = 'Enregistrer une Charge';
     document.getElementById('expense-id').value = '';
-    // Set default date to today's date if current month matches June 2026, otherwise selected month
-    const filterMonthVal = document.getElementById('filter-expense-month').value; // e.g. "2026-06"
+    
+    const filterMonthVal = document.getElementById('filter-expense-month')?.value;
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
-    if (todayStr.startsWith(filterMonthVal)) {
+    if (filterMonthVal && todayStr.startsWith(filterMonthVal)) {
       document.getElementById('expense-date').value = todayStr;
-    } else {
+    } else if (filterMonthVal) {
       document.getElementById('expense-date').value = `${filterMonthVal}-01`;
+    } else {
+      document.getElementById('expense-date').value = todayStr;
     }
   }
 
-  modal.classList.add('open');
+  modal?.classList.add('open');
 }
 
 function closeModal() {
-  document.getElementById('expense-modal').classList.remove('open');
+  document.getElementById('expense-modal')?.classList.remove('open');
+  editingId = null;
 }
 
 /**
  * Handle Form Submission
  */
-function handleFormSubmit(e) {
+async function handleFormSubmit(e) {
   e.preventDefault();
 
-  const id = document.getElementById('expense-id').value;
   const date = document.getElementById('expense-date').value;
   const category = document.getElementById('expense-category').value;
   const amount = parseFloat(document.getElementById('expense-amount').value) || 0;
@@ -86,17 +110,33 @@ function handleFormSubmit(e) {
 
   const payload = { date, category, amount, description };
 
-  if (id) {
-    db.updateOne('expenses', id, payload);
-    showToast('Charge modifiée', 'Les détails de la dépense ont été modifiés.', 'success');
-  } else {
-    payload.id = 'exp-' + Date.now();
-    db.insertOne('expenses', payload);
-    showToast('Charge enregistrée', 'La nouvelle dépense a été ajoutée aux registres.', 'success');
+  try {
+    if (editingId) {
+      await updateDoc(doc(db, "charges", editingId), payload);
+      showToast('Charge modifiée', 'Les détails de la dépense ont été modifiés.', 'success');
+    } else {
+      payload.createdAt = serverTimestamp();
+      await addDoc(collection(db, "charges"), payload);
+      showToast('Charge enregistrée', 'La nouvelle dépense a été ajoutée aux registres.', 'success');
+    }
+    closeModal();
+  } catch (err) {
+    showToast('Erreur', err.message, 'danger');
   }
+}
 
-  closeModal();
-  renderExpensesTable();
+/**
+ * Delete Expense Record
+ */
+async function deleteExpense(id) {
+  if (confirm('Voulez-vous vraiment supprimer cet enregistrement de charge ?')) {
+    try {
+      await deleteDoc(doc(db, "charges", id));
+      showToast('Charge supprimée', 'L\'enregistrement de dépense a été retiré.', 'success');
+    } catch (err) {
+      showToast('Erreur', err.message, 'danger');
+    }
+  }
 }
 
 /**
@@ -107,39 +147,35 @@ function renderExpensesTable() {
   const emptyState = document.getElementById('expenses-empty-state');
   if (!tbody) return;
 
-  const expenses = db.getTable('expenses');
-  const searchQuery = document.getElementById('search-expenses').value.toLowerCase().trim();
-  const selectedCat = document.getElementById('filter-expense-category').value;
-  const selectedMonth = document.getElementById('filter-expense-month').value; // YYYY-MM
-  const settings = db.getTable('settings');
-  const currency = settings.currency || '€';
+  const searchQuery = (document.getElementById('search-expenses')?.value || '').toLowerCase().trim();
+  const selectedCat = document.getElementById('filter-expense-category')?.value || '';
+  const selectedMonth = document.getElementById('filter-expense-month')?.value || '';
+  const currency = currentCurrencySymbol || '€';
 
   // Apply filters
-  const filtered = expenses.filter(exp => {
-    const matchesSearch = exp.description.toLowerCase().includes(searchQuery);
+  const filtered = allExpenses.filter(exp => {
+    const matchesSearch = (exp.description || '').toLowerCase().includes(searchQuery);
     const matchesCategory = !selectedCat || exp.category === selectedCat;
-    const matchesMonth = !selectedMonth || exp.date.startsWith(selectedMonth);
+    const matchesMonth = !selectedMonth || (exp.date && exp.date.startsWith(selectedMonth));
 
     return matchesSearch && matchesCategory && matchesMonth;
   });
 
   // Sort by date descending
-  filtered.sort((a, b) => b.date.localeCompare(a.date));
+  filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
   tbody.innerHTML = '';
 
   if (filtered.length === 0) {
-    emptyState.style.display = 'flex';
-    // Clear analytics as well or show zeros
+    if (emptyState) emptyState.style.display = 'flex';
     updateExpensesAnalytics([], currency);
     return;
   }
 
-  emptyState.style.display = 'none';
+  if (emptyState) emptyState.style.display = 'none';
 
   filtered.forEach(exp => {
-    // Formatting date
-    const d = new Date(exp.date);
+    const d = exp.date ? new Date(exp.date) : new Date();
     const formattedDate = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
     const tr = document.createElement('tr');
@@ -148,43 +184,44 @@ function renderExpensesTable() {
       <td>
         <span class="badge badge-info" style="font-weight:600;"><i class="fa-solid fa-tag"></i> ${exp.category}</span>
       </td>
-      <td style="font-weight: 700; color: var(--danger);">${exp.amount.toLocaleString()} ${currency}</td>
-      <td style="color: var(--text-muted); max-width: 250px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" title="${exp.description}">${exp.description}</td>
+      <td style="font-weight: 700; color: var(--danger);">${(exp.amount || 0).toLocaleString()} ${currency}</td>
+      <td style="color: var(--text-muted); max-width: 250px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" title="${exp.description || ''}">${exp.description || '—'}</td>
       <td>
         <div style="display: flex; gap: 6px; justify-content: center;">
-          <button class="btn btn-outline btn-icon btn-sm" onclick="openExpenseModal('${exp.id}')" title="Modifier">
+          <button class="btn btn-outline btn-icon btn-sm" data-action="edit" data-id="${exp.id}" title="Modifier">
             <i class="fa-solid fa-pen-to-square"></i>
           </button>
-          <button class="btn btn-danger btn-icon btn-sm" onclick="deleteExpense('${exp.id}')" title="Supprimer">
+          <button class="btn btn-danger btn-icon btn-sm" data-action="delete" data-id="${exp.id}" title="Supprimer">
             <i class="fa-solid fa-trash"></i>
           </button>
         </div>
       </td>
     `;
+
+    // Bind action listeners dynamically to avoid global scope ReferenceErrors
+    tr.querySelectorAll('button[data-action]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = btn.dataset.action;
+        const id = btn.dataset.id;
+        if (action === 'edit') openExpenseModal(id);
+        else if (action === 'delete') deleteExpense(id);
+      });
+    });
+
     tbody.appendChild(tr);
   });
 
   // Update Summary panel
-  const allMonthExpenses = expenses.filter(exp => !selectedMonth || exp.date.startsWith(selectedMonth));
+  const allMonthExpenses = allExpenses.filter(exp => !selectedMonth || (exp.date && exp.date.startsWith(selectedMonth)));
   updateExpensesAnalytics(allMonthExpenses, currency);
-}
-
-/**
- * Delete Expense Record
- */
-function deleteExpense(id) {
-  if (confirm('Voulez-vous vraiment supprimer cet enregistrement de charge ?')) {
-    db.deleteOne('expenses', id);
-    showToast('Charge supprimée', 'L\'enregistrement de dépense a été retiré.', 'success');
-    renderExpensesTable();
-  }
 }
 
 /**
  * Update Monthly Analytics summary & Doughnut chart
  */
 function updateExpensesAnalytics(monthExpenses, currency) {
-  const selectedMonth = document.getElementById('filter-expense-month').value;
+  const selectedMonth = document.getElementById('filter-expense-month')?.value;
   const headerLabel = document.getElementById('analytics-month-label');
   const outlayVal = document.getElementById('analytics-total-outlay');
   const catListDiv = document.getElementById('analytics-category-list');
@@ -193,16 +230,16 @@ function updateExpensesAnalytics(monthExpenses, currency) {
   if (!outlayVal || !catListDiv) return;
 
   // Format header month name
-  if (selectedMonth) {
+  if (selectedMonth && headerLabel) {
     const parts = selectedMonth.split('-');
     const date = new Date(parts[0], parts[1] - 1, 1);
     headerLabel.innerText = `Dépenses de ${date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}`;
-  } else {
+  } else if (headerLabel) {
     headerLabel.innerText = 'Dépenses Globales';
   }
 
   // Calculate sum total
-  const total = monthExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const total = monthExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   outlayVal.innerText = `${total.toLocaleString()} ${currency}`;
 
   // Summarize categories
@@ -212,7 +249,7 @@ function updateExpensesAnalytics(monthExpenses, currency) {
   const categorySums = categories.map(cat => {
     return monthExpenses
       .filter(e => e.category === cat)
-      .reduce((sum, e) => sum + e.amount, 0);
+      .reduce((sum, e) => sum + (e.amount || 0), 0);
   });
 
   // Render list breakdown
@@ -251,7 +288,6 @@ function updateExpensesAnalytics(monthExpenses, currency) {
   }
 
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const textColor = isDark ? '#94a3b8' : '#64748b';
 
   if (ctx) {
     chargesChart = new Chart(ctx, {
@@ -270,7 +306,7 @@ function updateExpensesAnalytics(monthExpenses, currency) {
         maintainAspectRatio: false,
         plugins: {
           legend: {
-            display: false // Hide legend on sidebar panel to save space
+            display: false
           }
         },
         cutout: '75%'

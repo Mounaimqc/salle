@@ -36,7 +36,7 @@ function listenToEmployees() {
 // ─── UI Events ─────────────────────────────────────────────────────────────
 function bindUIEvents() {
   document.getElementById('open-add-emp-btn')?.addEventListener('click', () => openModal());
-  document.getElementById('close-emp-modal-btn')?.addEventListener('click', closeModal);
+  document.getElementById('close-emp-modal')?.addEventListener('click', closeModal);
   document.getElementById('cancel-emp-btn')?.addEventListener('click', closeModal);
   document.getElementById('emp-form')?.addEventListener('submit', handleFormSubmit);
   document.getElementById('search-employees')?.addEventListener('input', renderEmployeesTable);

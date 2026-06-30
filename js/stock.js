@@ -35,7 +35,7 @@ function listenToStock() {
 // ─── UI Events ─────────────────────────────────────────────────────────────
 function bindUIEvents() {
   document.getElementById('open-add-stock-btn')?.addEventListener('click', () => openModal());
-  document.getElementById('close-stock-modal-btn')?.addEventListener('click', closeModal);
+  document.getElementById('close-stock-modal')?.addEventListener('click', closeModal);
   document.getElementById('cancel-stock-btn')?.addEventListener('click', closeModal);
   document.getElementById('stock-form')?.addEventListener('submit', handleFormSubmit);
 
