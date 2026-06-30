@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SallePro - Gestion des Clients</title>
+  <!-- Font Awesome & Style Imports -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+
+  <div class="app-container" id="app-root">
+    
+    <!-- Sidebar -->
+    <div id="sidebar-container"></div>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+      
+      <!-- Navbar -->
+      <div id="navbar-container"></div>
+      
+      <!-- Content Wrapper -->
+      <main class="content-wrapper">
+        
+        <!-- Section Header -->
+        <div class="section-header">
+          <div class="section-title">
+            <h2>Clients</h2>
+            <p>Gérez les contacts de vos clients, consultez leur historique et suivez leurs paiements.</p>
+          </div>
+          <div>
+            <button class="btn btn-secondary" id="open-add-client-btn">
+              <i class="fa-solid fa-user-plus"></i> Nouveau Client
+            </button>
+          </div>
+        </div>
+
+        <!-- Split Grid (List & Profile Detail Pane) -->
+        <div class="grid-container grid-cols-3" style="align-items: start;">
+          
+          <!-- Left Column (List Table) - spans 2 columns -->
+          <div class="card" style="grid-column: span 2; padding: 0; overflow: hidden;">
+            <div class="table-toolbar" style="padding: 20px 24px; margin-bottom: 0; border-bottom: 1px solid var(--border-color);">
+              <div class="search-box-wrapper" style="min-width: 320px;">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" class="form-control" placeholder="Rechercher par nom, téléphone, email..." id="search-clients">
+              </div>
+            </div>
+            
+            <div class="table-responsive">
+              <table class="table-premium">
+                <thead>
+                  <tr>
+                    <th>Nom / Prénom</th>
+                    <th>Téléphone</th>
+                    <th>Email</th>
+                    <th style="text-align: center;">Réservations</th>
+                    <th style="text-align: center;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="clients-table-body">
+                  <!-- Generated dynamically in clients.js -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Empty State -->
+            <div class="empty-state-wrapper" id="clients-empty-state" style="display: none;">
+              <div class="empty-state-icon"><i class="fa-solid fa-users-slash"></i></div>
+              <div class="empty-state-title">Aucun client trouvé</div>
+              <div class="empty-state-desc">Ajoutez un nouveau client pour commencer à enregistrer des réservations.</div>
+            </div>
+          </div>
+
+          <!-- Right Column (Client Profile Inspector) -->
+          <div class="card" id="client-profile-card">
+            <h3 class="card-title" style="border-bottom: 1px solid var(--border-color); padding-bottom: 14px; margin-bottom: 16px;">
+              Fiche Profil Client
+            </h3>
+            <div id="profile-card-content">
+              <div class="no-event-placeholder">
+                <i class="fa-solid fa-id-card"></i>
+                <span>Sélectionnez un client dans la liste pour afficher son historique complet.</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </main>
+      
+    </div>
+  </div>
+
+  <!-- Client Add/Edit Modal -->
+  <div class="modal-backdrop" id="client-modal">
+    <div class="modal-card" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="client-modal-title">Nouveau Client</h3>
+        <button class="close-modal-btn" id="close-client-modal-btn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="client-form">
+        <div class="modal-body">
+          <input type="hidden" id="client-id">
+          
+          <div class="form-group">
+            <label class="form-label" for="client-name">Nom complet</label>
+            <input type="text" class="form-control" id="client-name" required placeholder="Ex: Sophie Martin">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="client-phone">Téléphone</label>
+            <input type="tel" class="form-control" id="client-phone" required placeholder="Ex: 06 12 34 56 78">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="client-email">Adresse Email</label>
+            <input type="email" class="form-control" id="client-email" placeholder="Ex: sophie.martin@example.com">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="client-address">Adresse Physique</label>
+            <input type="text" class="form-control" id="client-address" placeholder="Ex: 12 Rue de la Paix, Paris">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="client-notes">Notes complémentaires</label>
+            <textarea class="form-control" id="client-notes" rows="3" placeholder="Préférences, contraintes alimentaires, demandes spécifiques..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="cancel-client-btn">Annuler</button>
+          <button type="submit" class="btn btn-secondary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Shared App Logic -->
+  <script src="js/app.js"></script>
+  <!-- Client Page Logic -->
+  <script src="js/clients.js"></script>
+</body>
+</html>

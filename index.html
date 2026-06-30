@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SallePro - Tableau de bord</title>
+  <!-- Font Awesome & Style Imports -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/responsive.css">
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  
+  <div class="app-container" id="app-root">
+    
+    <!-- Sidebar Placeholder -->
+    <div id="sidebar-container"></div>
+    
+    <!-- Main Content Area -->
+    <div class="main-content">
+      
+      <!-- Navbar Placeholder -->
+      <div id="navbar-container"></div>
+      
+      <!-- Content Wrapper -->
+      <main class="content-wrapper">
+        
+        <!-- Welcome banner -->
+        <div class="section-header">
+          <div class="section-title">
+            <h2 id="welcome-text">Ravi de vous revoir, Administrateur</h2>
+            <p>Voici la situation en direct de votre salle de fête aujourd'hui.</p>
+          </div>
+          <div>
+            <span class="badge badge-info" style="padding: 10px 18px; font-size: 0.9rem;">
+              <i class="fa-solid fa-clock"></i> <span id="current-live-date">Chargement...</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- 6 Metrics Cards Grid -->
+        <section class="metrics-grid">
+          <!-- Card 1: Reservations count -->
+          <div class="metric-card" onclick="window.location.href='reservations.html'">
+            <div class="metric-card-top">
+              <span class="metric-card-title">Réservations</span>
+              <div class="metric-card-icon"><i class="fa-solid fa-calendar-check"></i></div>
+            </div>
+            <div>
+              <div class="metric-card-value" id="kpi-reservations">0</div>
+              <div class="metric-card-trend up" id="kpi-reservations-trend">
+                <i class="fa-solid fa-arrow-up"></i> <span>0 ce mois-ci</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Revenue -->
+          <div class="metric-card" onclick="window.location.href='reports.html'">
+            <div class="metric-card-top">
+              <span class="metric-card-title">Revenu Global</span>
+              <div class="metric-card-icon"><i class="fa-solid fa-wallet"></i></div>
+            </div>
+            <div>
+              <div class="metric-card-value" id="kpi-revenue">0 €</div>
+              <div class="metric-card-trend up" id="kpi-revenue-trend">
+                <i class="fa-solid fa-arrow-up"></i> <span>+8% vs mois préc.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 3: Total Expenses -->
+          <div class="metric-card" onclick="window.location.href='charges.html'">
+            <div class="metric-card-top">
+              <span class="metric-card-title">Charges Globales</span>
+              <div class="metric-card-icon"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+            </div>
+            <div>
+              <div class="metric-card-value" id="kpi-expenses">0 €</div>
+              <div class="metric-card-trend down" id="kpi-expenses-trend">
+                <i class="fa-solid fa-arrow-down"></i> <span>-2% vs mois préc.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 4: Employees -->
+          <div class="metric-card" onclick="window.location.href='employees.html'">
+            <div class="metric-card-top">
+              <span class="metric-card-title">Employés</span>
+              <div class="metric-card-icon"><i class="fa-solid fa-user-check"></i></div>
+            </div>
+            <div>
+              <div class="metric-card-value" id="kpi-employees">0</div>
+              <div class="metric-card-trend" style="color: var(--text-light)">
+                <span>Membres du staff actifs</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 5: Inventory Alerts -->
+          <div class="metric-card" onclick="window.location.href='stock.html'">
+            <div class="metric-card-top">
+              <span class="metric-card-title">Alertes Stock</span>
+              <div class="metric-card-icon" id="kpi-stock-icon"><i class="fa-solid fa-boxes-stacked"></i></div>
+            </div>
+            <div>
+              <div class="metric-card-value" id="kpi-stock-alerts">0</div>
+              <div class="metric-card-trend" id="kpi-stock-trend" style="color: var(--text-muted)">
+                <span>Articles en rupture</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 6: Upcoming Event -->
+          <div class="metric-card" onclick="window.location.href='reservations.html'">
+            <div class="metric-card-top">
+              <span class="metric-card-title">Prochain Événement</span>
+              <div class="metric-card-icon"><i class="fa-solid fa-hourglass-half"></i></div>
+            </div>
+            <div>
+              <div class="metric-card-value" style="font-size: 1.15rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="kpi-next-event-title">Aucun</div>
+              <div class="metric-card-trend" id="kpi-next-event-date" style="color: var(--text-muted)">
+                <span>Aucune date planifiée</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Charts Grid Section -->
+        <section class="charts-grid">
+          <!-- Revenue vs Expenses Line/Bar Chart -->
+          <div class="card">
+            <div class="card-title-area">
+              <h3 class="card-title">Flux de Trésorerie (Revenus vs Charges)</h3>
+              <div style="font-size: 0.85rem; color: var(--text-muted);">Mise à jour en temps réel</div>
+            </div>
+            <div class="chart-wrapper">
+              <canvas id="cashflowChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Expenses breakdown Doughnut Chart -->
+          <div class="card">
+            <div class="card-title-area">
+              <h3 class="card-title">Répartition des Charges</h3>
+            </div>
+            <div class="chart-wrapper">
+              <canvas id="expensesPieChart"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <!-- Bottom Grid (Calendar & Recent Bookings) -->
+        <section class="dashboard-bottom-grid">
+          
+          <!-- Calendar Widget -->
+          <div class="card">
+            <div class="card-title-area">
+              <h3 class="card-title">Calendrier des Réservations</h3>
+              <div class="filter-group">
+                <span class="badge badge-success" style="font-size: 0.75rem;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background: #fff; margin-right:4px;"></span>Confirmé</span>
+                <span class="badge badge-warning" style="font-size: 0.75rem;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background: #fff; margin-right:4px;"></span>En attente</span>
+              </div>
+            </div>
+            
+            <div class="calendar-widget-container">
+              <!-- Grid Calendar -->
+              <div class="calendar-box">
+                <div class="calendar-ctrl-header">
+                  <button class="calendar-nav-btn" id="cal-prev-btn"><i class="fa-solid fa-chevron-left"></i></button>
+                  <span class="calendar-month-year" id="cal-month-year">Juin 2026</span>
+                  <button class="calendar-nav-btn" id="cal-next-btn"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+                <div class="calendar-grid" id="calendar-days-grid">
+                  <!-- Generated dynamically in dashboard.js -->
+                </div>
+              </div>
+
+              <!-- Day details panel -->
+              <div class="calendar-details-panel" id="calendar-details-panel">
+                <div class="calendar-details-title" id="cal-selected-day-label">Sélectionnez un jour</div>
+                <div id="cal-details-content">
+                  <div class="no-event-placeholder">
+                    <i class="fa-solid fa-calendar-day"></i>
+                    <span>Cliquez sur un jour pour voir les détails des réservations.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Reservations Table -->
+          <div class="card">
+            <div class="card-title-area">
+              <h3 class="card-title">Dernières Réservations</h3>
+              <button class="btn btn-outline btn-sm" onclick="window.location.href='reservations.html'">Voir tout <i class="fa-solid fa-arrow-right"></i></button>
+            </div>
+            <div class="table-responsive">
+              <table class="table-premium">
+                <thead>
+                  <tr>
+                    <th>Client</th>
+                    <th>Événement</th>
+                    <th>Date Prévue</th>
+                    <th>Total</th>
+                    <th>Statut</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-bookings-tbody">
+                  <!-- Generated dynamically in dashboard.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+          
+        </section>
+
+      </main>
+      
+    </div>
+  </div>
+
+  <!-- Shared App Logic -->
+  <script src="js/app.js"></script>
+  <!-- Dashboard Page Logic -->
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SallePro - Gestion des Employés</title>
+  <!-- Font Awesome & Style Imports -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/responsive.css">
+  <style>
+    /* Tabs Layout */
+    .tab-container {
+      display: flex;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 24px;
+      gap: 10px;
+    }
+
+    .tab-btn {
+      padding: 12px 24px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: var(--transition-fast);
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+    }
+
+    .tab-btn.active {
+      color: var(--color-secondary);
+      border-bottom-color: var(--color-secondary);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Attendance Toggle Buttons */
+    .attendance-toggle {
+      display: inline-flex;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+    }
+
+    .attendance-btn {
+      padding: 6px 14px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      background-color: var(--bg-surface);
+      color: var(--text-muted);
+      transition: var(--transition-fast);
+    }
+
+    .attendance-btn.present.active {
+      background-color: var(--success);
+      color: #000000;
+    }
+
+    .attendance-btn.absent.active {
+      background-color: var(--danger);
+      color: #ffffff;
+    }
+
+    .attendance-btn.leave.active {
+      background-color: var(--warning);
+      color: #000000;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container" id="app-root">
+    
+    <!-- Sidebar -->
+    <div id="sidebar-container"></div>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+      
+      <!-- Navbar -->
+      <div id="navbar-container"></div>
+      
+      <!-- Content Wrapper -->
+      <main class="content-wrapper">
+        
+        <!-- Header Section -->
+        <div class="section-header">
+          <div class="section-title">
+            <h2>Employés</h2>
+            <p>Pilotez votre personnel, suivez les présences quotidiennes et gérez la masse salariale.</p>
+          </div>
+          <div>
+            <button class="btn btn-secondary" id="open-add-emp-btn">
+              <i class="fa-solid fa-user-plus"></i> Nouvel Employé
+            </button>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="tab-container">
+          <button class="tab-btn active" id="tab-list-btn" onclick="switchTab('list')">
+            <i class="fa-solid fa-list-check"></i> Liste des Employés
+          </button>
+          <button class="tab-btn" id="tab-attendance-btn" onclick="switchTab('attendance')">
+            <i class="fa-solid fa-clipboard-user"></i> Présences & Salaires
+          </button>
+        </div>
+
+        <!-- Tab 1: Employees list -->
+        <div class="tab-content active" id="tab-list">
+          <section class="card" style="padding: 0; overflow: hidden;">
+            <div class="table-toolbar" style="padding: 20px 24px; margin-bottom:0; border-bottom:1px solid var(--border-color);">
+              <div class="search-box-wrapper" style="min-width:320px;">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" class="form-control" placeholder="Rechercher par nom, rôle..." id="search-employees">
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table-premium">
+                <thead>
+                  <tr>
+                    <th>Employé</th>
+                    <th>Poste / Rôle</th>
+                    <th>Téléphone</th>
+                    <th>Salaire de base</th>
+                    <th>Date d'embauche</th>
+                    <th>Statut</th>
+                    <th style="text-align: center;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="employees-table-body">
+                  <!-- Generated dynamically in employees.js -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Empty State -->
+            <div class="empty-state-wrapper" id="employees-empty-state" style="display: none;">
+              <div class="empty-state-icon"><i class="fa-solid fa-user-slash"></i></div>
+              <div class="empty-state-title">Aucun employé trouvé</div>
+              <div class="empty-state-desc">Enregistrez de nouveaux membres du personnel pour piloter vos présences.</div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Tab 2: Attendance & Salary Sheet -->
+        <div class="tab-content" id="tab-attendance">
+          <div class="grid-container grid-cols-3" style="align-items: start;">
+            
+            <!-- Left Panel (Daily Attendance Tracker) - spans 2 columns -->
+            <div class="card" style="grid-column: span 2;">
+              <div class="card-title-area" style="margin-bottom: 20px;">
+                <h3 class="card-title">Registre des Présences Quotidiennes</h3>
+                
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size:0.9rem; font-weight:600; color:var(--text-muted);">Date :</span>
+                  <input type="date" class="form-control" id="attendance-date" style="padding: 8px 12px; font-size:0.9rem; max-width:180px;">
+                </div>
+              </div>
+              
+              <div class="table-responsive" style="border: none;">
+                <table class="table-premium">
+                  <thead>
+                    <tr>
+                      <th>Employé</th>
+                      <th>Poste</th>
+                      <th>Statut Actuel</th>
+                      <th style="text-align: center; width: 220px;">Pointage Présence</th>
+                    </tr>
+                  </thead>
+                  <tbody id="attendance-table-body">
+                    <!-- Generated dynamically in employees.js -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Right Panel (Salary & Payroll Summary) -->
+            <div class="card">
+              <h3 class="card-title" style="border-bottom:1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+                Masse Salariale Mensuelle
+              </h3>
+              
+              <div style="display: flex; flex-direction: column; gap: 16px;">
+                <!-- Total Salary Budget KPI -->
+                <div style="background-color: var(--bg-app); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 20px; text-align: center;">
+                  <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing:0.5px;">Masse Salariale Totale</span>
+                  <div style="font-size: 2rem; font-weight: 800; color: var(--color-secondary); margin-top: 6px;" id="total-payroll-val">0.00 €</div>
+                  <p style="font-size: 0.75rem; color: var(--text-light); margin-top: 4px;">Somme des salaires des employés actifs</p>
+                </div>
+
+                <!-- Staff Distribution info -->
+                <div>
+                  <h4 style="font-size: 0.85rem; font-weight: 700; color: var(--text-main); margin-bottom: 10px;">Répartition des Rôles</h4>
+                  <div style="display:flex; flex-direction:column; gap:8px;" id="staff-roles-breakdown">
+                    <!-- Loaded dynamically -->
+                  </div>
+                </div>
+
+                <!-- Expense Quick Link -->
+                <div style="border-top:1px solid var(--border-color); padding-top:16px; margin-top: 4px;">
+                  <button class="btn btn-outline btn-sm" style="width: 100%;" onclick="window.location.href='charges.html'">
+                    <i class="fa-solid fa-file-invoice-dollar"></i> Enregistrer dans les Charges
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </main>
+      
+    </div>
+  </div>
+
+  <!-- Employee Add/Edit Modal -->
+  <div class="modal-backdrop" id="emp-modal">
+    <div class="modal-card" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="emp-modal-title">Nouvel Employé</h3>
+        <button class="close-modal-btn" id="close-emp-modal-btn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="emp-form">
+        <div class="modal-body">
+          <input type="hidden" id="emp-id">
+          
+          <div class="form-group">
+            <label class="form-label" for="emp-name">Nom complet</label>
+            <input type="text" class="form-control" id="emp-name" required placeholder="Ex: Ahmed Cherif">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="emp-position">Poste / Rôle</label>
+              <select class="form-control" id="emp-position" required>
+                <option value="Chef Serveur">Chef Serveur</option>
+                <option value="Serveur">Serveur</option>
+                <option value="Décoratrice">Décoratrice</option>
+                <option value="Technicien Son & Lumière">Technicien Son & Lumière</option>
+                <option value="Responsable Cuisine & Buffet">Responsable Cuisine & Buffet</option>
+                <option value="Agent de Sécurité">Agent de Sécurité</option>
+                <option value="Agent de Nettoyage">Agent de Nettoyage</option>
+                <option value="Autre">Autre (préciser)</option>
+              </select>
+            </div>
+            <div class="form-group" id="emp-position-other-wrapper" style="display: none;">
+              <label class="form-label" for="emp-position-other">Autre Poste</label>
+              <input type="text" class="form-control" id="emp-position-other" placeholder="Ex: Plongeur">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="emp-phone">Téléphone</label>
+            <input type="tel" class="form-control" id="emp-phone" required placeholder="Ex: 05 55 11 22 33">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="emp-salary">Salaire de base (€ / mois)</label>
+              <input type="number" class="form-control" id="emp-salary" min="0" required placeholder="Ex: 850">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="emp-hiring-date">Date d'embauche</label>
+              <input type="date" class="form-control" id="emp-hiring-date" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="emp-status">Statut</label>
+            <select class="form-control" id="emp-status" required>
+              <option value="Actif">Actif</option>
+              <option value="Inactif">Inactif</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="cancel-emp-btn">Annuler</button>
+          <button type="submit" class="btn btn-secondary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Shared App Logic -->
+  <script src="js/app.js"></script>
+  <!-- Employee Page Logic -->
+  <script src="js/employees.js"></script>
+</body>
+</html>

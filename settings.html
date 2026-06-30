@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SallePro - Paramètres Système</title>
+  <!-- Font Awesome & Style Imports -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/responsive.css">
+  <style>
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 30px;
+    }
+
+    @media (max-width: 991px) {
+      .settings-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .form-group-toggle {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .form-group-toggle:last-child {
+      border-bottom: none;
+    }
+
+    .toggle-description {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .toggle-description span:first-child {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .toggle-description span:last-child {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* Switch Styling */
+    .switch-toggle {
+      position: relative;
+      display: inline-block;
+      width: 50px;
+      height: 26px;
+    }
+
+    .switch-toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--border-color);
+      transition: .4s;
+      border-radius: 34px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: var(--color-secondary);
+    }
+
+    input:focus + .slider {
+      box-shadow: 0 0 1px var(--color-secondary);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(24px);
+      background-color: #000000;
+    }
+
+    /* Backup Restore buttons styles */
+    .backup-container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 10px;
+    }
+
+    .file-input-wrapper {
+      position: relative;
+      overflow: hidden;
+      display: inline-block;
+      width: 100%;
+    }
+
+    .file-input-wrapper input[type=file] {
+      font-size: 100px;
+      position: absolute;
+      left: 0;
+      top: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container" id="app-root">
+    
+    <!-- Sidebar -->
+    <div id="sidebar-container"></div>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+      
+      <!-- Navbar -->
+      <div id="navbar-container"></div>
+      
+      <!-- Content Wrapper -->
+      <main class="content-wrapper">
+        
+        <div class="section-header">
+          <div class="section-title">
+            <h2>Paramètres</h2>
+            <p>Ajustez les coordonnées de votre établissement, changez de devise, ou sauvegardez votre base de données.</p>
+          </div>
+        </div>
+
+        <div class="settings-grid">
+          
+          <!-- Left Column (Establishment Profile Form) -->
+          <div class="card">
+            <h3 class="card-title" style="border-bottom: 1px solid var(--border-color); padding-bottom: 14px; margin-bottom: 24px;">
+              <i class="fa-solid fa-hotel"></i> Profil de l'Établissement
+            </h3>
+            
+            <form id="settings-hall-form">
+              <!-- Hall Name -->
+              <div class="form-group">
+                <label class="form-label" for="settings-name">Nom de la salle de fêtes</label>
+                <input type="text" class="form-control" id="settings-name" required placeholder="Ex: Palais Impérial">
+              </div>
+
+              <!-- Address -->
+              <div class="form-group">
+                <label class="form-label" for="settings-address">Adresse physique</label>
+                <input type="text" class="form-control" id="settings-address" required placeholder="Ex: 12 Rue des Fêtes, Paris">
+              </div>
+
+              <!-- Phone -->
+              <div class="form-group">
+                <label class="form-label" for="settings-phone">Numéro de téléphone</label>
+                <input type="text" class="form-control" id="settings-phone" required placeholder="Ex: 06 12 34 56 78">
+              </div>
+
+              <div class="form-row">
+                <!-- Currency symbol -->
+                <div class="form-group">
+                  <label class="form-label" for="settings-currency">Symbole de devise</label>
+                  <select class="form-control" id="settings-currency" required>
+                    <option value="€">Euro (€)</option>
+                    <option value="$">Dollar ($)</option>
+                    <option value="DA">Dinar Algérien (DA)</option>
+                    <option value="DH">Dirham Marocain (DH)</option>
+                    <option value="£">Livre Sterling (£)</option>
+                  </select>
+                </div>
+                <!-- Currency Label -->
+                <div class="form-group">
+                  <label class="form-label" for="settings-currency-name">Code Devise</label>
+                  <input type="text" class="form-control" id="settings-currency-name" readonly style="background-color: var(--bg-surface-hover);">
+                </div>
+              </div>
+
+              <div style="border-top:1px solid var(--border-color); padding-top:20px; margin-top:20px; text-align:right;">
+                <button type="submit" class="btn btn-secondary">
+                  <i class="fa-solid fa-floppy-disk"></i> Enregistrer les modifications
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Right Column (Preferences & Backups) -->
+          <div style="display: flex; flex-direction: column; gap: 30px;">
+            
+            <!-- Preferences Panel -->
+            <div class="card">
+              <h3 class="card-title" style="border-bottom: 1px solid var(--border-color); padding-bottom: 14px; margin-bottom: 16px;">
+                <i class="fa-solid fa-sliders"></i> Préférences & Apparence
+              </h3>
+              
+              <div class="form-group-toggle">
+                <div class="toggle-description">
+                  <span>Thème Sombre</span>
+                  <span>Activer l'affichage en mode nuit</span>
+                </div>
+                <label class="switch-toggle">
+                  <input type="checkbox" id="pref-darkmode">
+                  <span class="slider"></span>
+                </label>
+              </div>
+
+              <div class="form-group-toggle">
+                <div class="toggle-description">
+                  <span>Alertes de Stocks</span>
+                  <span>Afficher les toasts critiques pour approvisionnements</span>
+                </div>
+                <label class="switch-toggle">
+                  <input type="checkbox" id="pref-notifications" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Database Backup and Restore -->
+            <div class="card">
+              <h3 class="card-title" style="border-bottom: 1px solid var(--border-color); padding-bottom: 14px; margin-bottom: 16px;">
+                <i class="fa-solid fa-database"></i> Sauvegarde & Restauration
+              </h3>
+              <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom: 16px;">
+                Exportez toute la base de données locale (clients, réservations, inventaires) sous fichier JSON ou importez une sauvegarde existante.
+              </p>
+
+              <div class="backup-container">
+                <!-- Backup Export Button -->
+                <button class="btn btn-primary" id="backup-export-btn" style="width: 100%;">
+                  <i class="fa-solid fa-file-export"></i> Exporter la Base de Données
+                </button>
+                
+                <!-- Restore Upload Button -->
+                <div class="file-input-wrapper">
+                  <button class="btn btn-outline" style="width: 100%;">
+                    <i class="fa-solid fa-file-import"></i> Importer une Sauvegarde (.json)
+                  </button>
+                  <input type="file" id="backup-import-file" accept=".json">
+                </div>
+                <small style="color:var(--danger); font-size:0.75rem; text-align:center;">
+                  <i class="fa-solid fa-triangle-exclamation"></i> L'importation écrase la base de données actuelle !
+                </small>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </main>
+      
+    </div>
+  </div>
+
+  <!-- Shared App Logic -->
+  <script src="js/app.js"></script>
+  <!-- Settings Logic -->
+  <script src="js/settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SallePro - Gestion du Stock</title>
+  <!-- Font Awesome & Style Imports -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/responsive.css">
+  <style>
+    /* Stock Card layout overrides */
+    .stock-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+    }
+
+    @media (max-width: 1200px) {
+      .stock-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .stock-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 480px) {
+      .stock-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .stock-card {
+      background-color: var(--bg-surface);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-color);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+      transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .stock-card:hover {
+      transform: translateY(-5px);
+      box-shadow: var(--shadow-md);
+      border-color: var(--color-secondary);
+    }
+
+    .stock-card-img-placeholder {
+      height: 150px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3rem;
+      position: relative;
+      background: linear-gradient(135deg, var(--bg-sidebar), var(--color-primary));
+      color: var(--color-secondary);
+    }
+
+    .stock-card-img-placeholder.alert-active::after {
+      content: 'STOCK BAS';
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background-color: var(--danger);
+      color: #ffffff;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 50px;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);
+    }
+
+    .stock-card-content {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex: 1;
+    }
+
+    .stock-card-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-main);
+      line-height: 1.3;
+    }
+
+    .stock-meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+    }
+
+    .stock-qty-badge {
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: var(--radius-sm);
+    }
+
+    .stock-qty-badge.ok {
+      background-color: var(--success-light);
+      color: var(--success);
+    }
+
+    .stock-qty-badge.low {
+      background-color: var(--danger-light);
+      color: var(--danger);
+    }
+
+    .stock-actions {
+      border-top: 1px solid var(--border-color);
+      padding: 12px 20px;
+      display: flex;
+      gap: 10px;
+      background-color: var(--bg-surface-hover);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container" id="app-root">
+    
+    <!-- Sidebar -->
+    <div id="sidebar-container"></div>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+      
+      <!-- Navbar -->
+      <div id="navbar-container"></div>
+      
+      <!-- Content Wrapper -->
+      <main class="content-wrapper">
+        
+        <!-- Header Section -->
+        <div class="section-header">
+          <div class="section-title">
+            <h2>Inventaire & Équipements</h2>
+            <p>Supervisez le matériel de votre salle (chaises, tables, déco, vaisselle, sono/lumières) et suivez les alertes.</p>
+          </div>
+          <div>
+            <button class="btn btn-secondary" id="open-add-stock-btn">
+              <i class="fa-solid fa-folder-plus"></i> Ajouter un Article
+            </button>
+          </div>
+        </div>
+
+        <!-- Toolbar Filters -->
+        <section class="card" style="margin-bottom: 30px; padding: 20px;">
+          <div class="table-toolbar" style="margin-bottom: 0;">
+            <div class="search-box-wrapper" style="min-width: 320px;">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" class="form-control" placeholder="Rechercher un article..." id="search-stock">
+            </div>
+
+            <div class="filter-group">
+              <select class="form-control" id="filter-stock-category" style="min-width: 200px;">
+                <option value="">Toutes les catégories</option>
+                <option value="Chaises">Chaises</option>
+                <option value="Tables">Tables</option>
+                <option value="Décoration">Décoration</option>
+                <option value="Vaisselle">Vaisselle</option>
+                <option value="Sonorisation">Sonorisation / Micro</option>
+                <option value="Éclairage">Éclairage / Projecteurs</option>
+              </select>
+
+              <label class="checkbox-label" style="margin-left: 10px; font-weight: 600;">
+                <input type="checkbox" class="checkbox-input" id="filter-low-stock-only">
+                <span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> Stock Bas uniquement</span>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- Dynamic Stock Cards Grid -->
+        <section class="stock-grid" id="stock-grid-container">
+          <!-- Rendered dynamically by stock.js -->
+        </section>
+
+        <!-- Empty State -->
+        <div class="card" id="stock-empty-state" style="display: none; padding: 60px 0;">
+          <div class="empty-state-wrapper">
+            <div class="empty-state-icon"><i class="fa-solid fa-box-open"></i></div>
+            <div class="empty-state-title">Aucun matériel trouvé</div>
+            <div class="empty-state-desc">Aucun article ne correspond à votre recherche ou catégorie sélectionnée.</div>
+          </div>
+        </div>
+
+      </main>
+      
+    </div>
+  </div>
+
+  <!-- Stock Add/Edit Modal -->
+  <div class="modal-backdrop" id="stock-modal">
+    <div class="modal-card" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="stock-modal-title">Ajouter un Article</h3>
+        <button class="close-modal-btn" id="close-stock-modal-btn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="stock-form">
+        <div class="modal-body">
+          <input type="hidden" id="stock-id">
+          
+          <div class="form-group">
+            <label class="form-label" for="stock-name">Nom de l'article</label>
+            <input type="text" class="form-control" id="stock-name" required placeholder="Ex: Chaise Napoléon Blanche">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="stock-category">Catégorie</label>
+            <select class="form-control" id="stock-category" required>
+              <option value="Chaises">Chaises</option>
+              <option value="Tables">Tables</option>
+              <option value="Décoration">Décoration</option>
+              <option value="Vaisselle">Vaisselle</option>
+              <option value="Sonorisation">Sonorisation</option>
+              <option value="Éclairage">Éclairage</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="stock-quantity">Quantité en stock</label>
+              <input type="number" class="form-control" id="stock-quantity" min="0" required placeholder="Ex: 250">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="stock-min-alert">Alerte quantité minimale</label>
+              <input type="number" class="form-control" id="stock-min-alert" min="0" required placeholder="Ex: 20">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="stock-price">Prix estimé par unité (€)</label>
+            <input type="number" class="form-control" id="stock-price" min="0" placeholder="Ex: 15">
+            <small style="color:var(--text-light); font-size:0.75rem;">Utile pour l'évaluation du patrimoine matériel de la salle.</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="cancel-stock-btn">Annuler</button>
+          <button type="submit" class="btn btn-secondary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Shared App Logic -->
+  <script src="js/app.js"></script>
+  <!-- Stock Page Logic -->
+  <script src="js/stock.js"></script>
+</body>
+</html>
