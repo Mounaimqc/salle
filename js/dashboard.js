@@ -7,14 +7,11 @@ import { showToast, currentCurrencySymbol } from "./app.js";
 import {
   collection,
   query,
-  where,
   orderBy,
-  limit,
-  onSnapshot,
-  getDocs,
-  doc,
-  getDoc
+  onSnapshot
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+console.log('dashboard.js: Imports loaded successfully');
 
 let cashflowChart = null;
 let expensesPieChart = null;
@@ -22,17 +19,29 @@ let currentCalDate = new Date();
 let allReservations = [];
 
 document.addEventListener('DOMContentLoaded', () => {
-  updateLiveDate();
+  try {
+    updateLiveDate();
+  } catch (error) {
+    console.error('dashboard.js: Failed to update live date:', error);
+  }
 });
 
 // Wait for auth session before loading data
-window.addEventListener('authSessionLoaded', () => {
-  const user = JSON.parse(sessionStorage.getItem('sp_current_user') || '{}');
-  const welcomeEl = document.getElementById('welcome-text');
-  if (welcomeEl && user.name) {
-    welcomeEl.innerText = `Ravi de vous revoir, ${user.name}`;
+window.addEventListener('authSessionLoaded', async () => {
+  console.log('dashboard.js: authSessionLoaded event received');
+  try {
+    const user = JSON.parse(sessionStorage.getItem('sp_current_user') || '{}');
+    const welcomeEl = document.getElementById('welcome-text');
+    if (welcomeEl && user.name) {
+      welcomeEl.innerText = `Ravi de vous revoir, ${user.name}`;
+    }
+    
+    await initDashboard();
+  } catch (error) {
+    console.error('dashboard.js: Dashboard page initialization failed:', error);
+    const { showFatalError } = await import("./auth.js");
+    showFatalError(error);
   }
-  initDashboard();
 });
 
 function updateLiveDate() {
@@ -44,11 +53,33 @@ function updateLiveDate() {
   });
 }
 
-function initDashboard() {
-  listenToReservations();
-  listenToClients();
-  listenToStock();
-  listenToExpenses();
+async function initDashboard() {
+  console.log('dashboard.js: Initializing dashboard widgets');
+
+  // Load and listen to each widget independently so one widget crashing won't block the page
+  try {
+    listenToReservations();
+  } catch (err) {
+    console.error("dashboard.js: Failed to start reservations listener:", err);
+  }
+
+  try {
+    listenToClients();
+  } catch (err) {
+    console.error("dashboard.js: Failed to start clients listener:", err);
+  }
+
+  try {
+    listenToStock();
+  } catch (err) {
+    console.error("dashboard.js: Failed to start stock listener:", err);
+  }
+
+  try {
+    listenToExpenses();
+  } catch (err) {
+    console.error("dashboard.js: Failed to start expenses listener:", err);
+  }
 }
 
 // --- Real-time Reservations listener ---
@@ -61,12 +92,31 @@ function listenToReservations() {
       allReservations.push({ id: doc.id, ...doc.data() });
     });
 
-    updateReservationKPIs();
-    updateRecentBookingsTable();
-    renderCalendarWidget();
-    updateCashflowChart();
+    try {
+      updateReservationKPIs();
+    } catch (err) {
+      console.error("dashboard.js: Failed to update reservations KPIs:", err);
+    }
+
+    try {
+      updateRecentBookingsTable();
+    } catch (err) {
+      console.error("dashboard.js: Failed to update recent bookings table:", err);
+    }
+
+    try {
+      renderCalendarWidget();
+    } catch (err) {
+      console.error("dashboard.js: Failed to render calendar widget:", err);
+    }
+
+    try {
+      updateCashflowChart();
+    } catch (err) {
+      console.error("dashboard.js: Failed to update cashflow chart:", err);
+    }
   }, (err) => {
-    console.error("Error listening to reservations:", err);
+    console.error("dashboard.js: Error listening to reservations:", err);
   });
 }
 
@@ -75,6 +125,8 @@ function listenToClients() {
   onSnapshot(collection(db, "clients"), (snapshot) => {
     const el = document.getElementById('kpi-clients');
     if (el) el.innerText = snapshot.size;
+  }, (err) => {
+    console.error("dashboard.js: Error listening to clients:", err);
   });
 }
 
@@ -95,12 +147,17 @@ function listenToStock() {
     if (lowCount > 0 && iconEl) {
       iconEl.style.backgroundColor = 'var(--danger-light)';
       iconEl.style.color = 'var(--danger)';
+    } else if (iconEl) {
+      iconEl.style.backgroundColor = '';
+      iconEl.style.color = '';
     }
     if (trendEl) {
       trendEl.innerHTML = lowCount > 0
         ? `<span style="color:var(--danger);font-weight:600;"><i class="fa-solid fa-triangle-exclamation"></i> Approvisionnement requis</span>`
         : `<span>Tous les stocks sont OK</span>`;
     }
+  }, (err) => {
+    console.error("dashboard.js: Error listening to stock:", err);
   });
 }
 
@@ -125,7 +182,13 @@ function listenToExpenses() {
     const el = document.getElementById('kpi-expenses');
     if (el) el.innerText = `${monthlyExpenses.toLocaleString()} ${sym}`;
 
-    updateExpensesPieChart(categorySums);
+    try {
+      updateExpensesPieChart(categorySums);
+    } catch (err) {
+      console.error("dashboard.js: Failed to update expenses pie chart:", err);
+    }
+  }, (err) => {
+    console.error("dashboard.js: Error listening to expenses:", err);
   });
 }
 
@@ -152,16 +215,16 @@ function updateReservationKPIs() {
 
   // KPI: next upcoming confirmed event
   const future = allReservations
-    .filter(r => r.status === 'Confirmé' && r.eventDate >= todayStr)
-    .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
+    .filter(r => r.status === 'Confirmé' && r.eventDate && r.eventDate >= todayStr)
+    .sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || ''));
 
   const kpiNext = document.getElementById('kpi-next-event');
   const kpiNextDate = document.getElementById('kpi-next-event-date');
 
   if (future.length > 0) {
     const next = future[0];
-    if (kpiNext) kpiNext.innerText = `${next.eventType} — ${next.clientName}`;
-    if (kpiNextDate) {
+    if (kpiNext) kpiNext.innerText = `${next.eventType || 'Événement'} — ${next.clientName || 'Client'}`;
+    if (kpiNextDate && next.eventDate) {
       const d = new Date(next.eventDate);
       kpiNextDate.innerHTML = `<i class="fa-solid fa-calendar"></i> ${d.toLocaleDateString('fr-FR', { day:'numeric', month:'short' })}`;
     }
@@ -198,7 +261,7 @@ function updateRecentBookingsTable() {
       <td>${d}</td>
       <td style="color:var(--success);font-weight:600;">${(res.deposit || 0).toLocaleString()} ${sym}</td>
       <td style="color:var(--danger);font-weight:700;">${(res.remainingAmount || 0).toLocaleString()} ${sym}</td>
-      <td><span class="badge ${badge}">${res.status}</span></td>
+      <td><span class="badge ${badge}">${res.status || 'En attente'}</span></td>
     `;
     tbody.appendChild(tr);
   });
@@ -258,11 +321,15 @@ function renderCalendarWidget() {
       cell.appendChild(dot);
     }
 
-    cell.addEventListener('click', () => {
+    cell.onclick = () => {
       document.querySelectorAll('.calendar-day-cell').forEach(c => c.classList.remove('selected'));
       cell.classList.add('selected');
-      showDayDetails(dateStr, booking);
-    });
+      try {
+        showDayDetails(dateStr, booking);
+      } catch (err) {
+        console.error("dashboard.js: Failed to show day details:", err);
+      }
+    };
 
     grid.appendChild(cell);
   }
@@ -278,6 +345,8 @@ function showDayDetails(dateStr, booking) {
   const label = document.getElementById('cal-selected-day-label');
   const content = document.getElementById('cal-details-content');
   const sym = currentCurrencySymbol || '€';
+
+  if (!content) return;
 
   const dateFormatted = new Date(dateStr).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
   if (label) label.innerText = dateFormatted;
@@ -299,12 +368,12 @@ function showDayDetails(dateStr, booking) {
   content.innerHTML = `
     <div class="event-details-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <span style="font-weight:700;color:var(--color-secondary);">${booking.eventType}</span>
+        <span style="font-weight:700;color:var(--color-secondary);">${booking.eventType || 'Événement'}</span>
         ${statusBadge}
       </div>
-      <div class="event-details-row"><span>Client:</span><span>${booking.clientName}</span></div>
+      <div class="event-details-row"><span>Client:</span><span>${booking.clientName || '—'}</span></div>
       <div class="event-details-row"><span>Téléphone:</span><span>${booking.phone || '—'}</span></div>
-      <div class="event-details-row"><span>Invités:</span><span>${booking.guests} pers.</span></div>
+      <div class="event-details-row"><span>Invités:</span><span>${booking.guests || 0} pers.</span></div>
       <div class="event-details-row"><span>Total:</span><span>${(booking.totalAmount || 0).toLocaleString()} ${sym}</span></div>
       <div class="event-details-row"><span>Reste dû:</span>
         <span style="color:${booking.remainingAmount > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:700;">
@@ -407,5 +476,11 @@ function updateExpensesPieChart(categorySums) {
 
 // Re-render charts when theme changes
 window.addEventListener('spSettingsUpdated', () => {
-  if (allReservations.length > 0) updateCashflowChart();
+  if (allReservations.length > 0) {
+    try {
+      updateCashflowChart();
+    } catch (err) {
+      console.error("dashboard.js: Failed to update cashflow chart on theme change:", err);
+    }
+  }
 });

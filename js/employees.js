@@ -10,16 +10,43 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
+console.log('employees.js: Imports loaded successfully');
+
 let allEmployees = [];
 let editingId = null;
 
-window.addEventListener('authSessionLoaded', () => {
-  listenToEmployees();
-  bindUIEvents();
+window.addEventListener('authSessionLoaded', async () => {
+  console.log('employees.js: authSessionLoaded event received');
+  try {
+    await initEmployeesPage();
+  } catch (error) {
+    console.error('employees.js: Page initialization failed:', error);
+    const { showFatalError } = await import("./auth.js");
+    showFatalError(error);
+  }
+});
+
+async function initEmployeesPage() {
+  console.log('employees.js: Initializing employees page');
+
+  try {
+    listenToEmployees();
+  } catch (err) {
+    console.error("employees.js: Failed to start employees listener:", err);
+  }
+
+  try {
+    bindUIEvents();
+  } catch (err) {
+    console.error("employees.js: Failed to bind UI events:", err);
+  }
+
   // Default attendance date input to today
   const dateInput = document.getElementById('attendance-date');
   if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
-});
+
+  console.log('employees.js: Page initialization completed');
+}
 
 // ─── Real-time Listener ────────────────────────────────────────────────────
 function listenToEmployees() {
@@ -27,20 +54,46 @@ function listenToEmployees() {
   onSnapshot(q, (snapshot) => {
     allEmployees = [];
     snapshot.forEach(d => allEmployees.push({ id: d.id, ...d.data() }));
-    renderEmployeesTable();
-    renderAttendanceTable();
-    loadPayrollSummary();
+    
+    try {
+      renderEmployeesTable();
+    } catch (err) {
+      console.error("employees.js: Error rendering employees table:", err);
+    }
+    
+    try {
+      renderAttendanceTable();
+    } catch (err) {
+      console.error("employees.js: Error rendering attendance table:", err);
+    }
+    
+    try {
+      loadPayrollSummary();
+    } catch (err) {
+      console.error("employees.js: Error loading payroll summary:", err);
+    }
   }, err => showToast('Erreur', err.message, 'danger'));
 }
 
 // ─── UI Events ─────────────────────────────────────────────────────────────
 function bindUIEvents() {
-  document.getElementById('open-add-emp-btn')?.addEventListener('click', () => openModal());
-  document.getElementById('close-emp-modal')?.addEventListener('click', closeModal);
-  document.getElementById('cancel-emp-btn')?.addEventListener('click', closeModal);
-  document.getElementById('emp-form')?.addEventListener('submit', handleFormSubmit);
-  document.getElementById('search-employees')?.addEventListener('input', renderEmployeesTable);
-  document.getElementById('attendance-date')?.addEventListener('change', renderAttendanceTable);
+  const addBtn = document.getElementById('open-add-emp-btn');
+  if (addBtn) addBtn.onclick = () => openModal();
+
+  const closeBtn = document.getElementById('close-emp-modal');
+  if (closeBtn) closeBtn.onclick = () => closeModal();
+
+  const cancelBtn = document.getElementById('cancel-emp-btn');
+  if (cancelBtn) cancelBtn.onclick = () => closeModal();
+
+  const form = document.getElementById('emp-form');
+  if (form) form.addEventListener('submit', handleFormSubmit);
+
+  const searchInput = document.getElementById('search-employees');
+  if (searchInput) searchInput.addEventListener('input', () => renderEmployeesTable());
+
+  const dateInput = document.getElementById('attendance-date');
+  if (dateInput) dateInput.addEventListener('change', () => renderAttendanceTable());
 
   // Position select toggle
   const posSelect = document.getElementById('emp-position');
@@ -66,7 +119,11 @@ window.switchTab = function(tabName) {
     document.getElementById('tab-attendance-btn')?.classList.add('active');
     document.getElementById('tab-attendance')?.classList.add('active');
     if (addEmpBtn) addEmpBtn.style.display = 'none';
-    renderAttendanceTable();
+    try {
+      renderAttendanceTable();
+    } catch (err) {
+      console.error("employees.js: Failed to render attendance table on tab switch:", err);
+    }
   }
 };
 
@@ -77,7 +134,8 @@ function renderEmployeesTable() {
   if (!tbody) return;
 
   const sym = currentCurrencySymbol || '€';
-  const search = (document.getElementById('search-employees')?.value || '').toLowerCase();
+  const searchInput = document.getElementById('search-employees');
+  const search = (searchInput?.value || '').toLowerCase();
 
   const filtered = allEmployees.filter(e =>
     (e.name || '').toLowerCase().includes(search) ||
@@ -99,12 +157,12 @@ function renderEmployeesTable() {
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td style="font-weight:600;">${emp.name}</td>
-      <td style="color:var(--text-muted);">${emp.position}</td>
+      <td style="font-weight:600;">${emp.name || '—'}</td>
+      <td style="color:var(--text-muted);">${emp.position || '—'}</td>
       <td>${emp.phone || '—'}</td>
       <td style="font-weight:700;">${(emp.salary || 0).toLocaleString()} ${sym}</td>
       <td>${hireDate}</td>
-      <td><span class="badge ${badge}">${emp.status}</span></td>
+      <td><span class="badge ${badge}">${emp.status || 'Actif'}</span></td>
       <td>
         <div style="display:flex;gap:6px;justify-content:center;">
           <button class="btn btn-outline btn-icon btn-sm" data-action="edit" data-id="${emp.id}"><i class="fa-solid fa-pen-to-square"></i></button>
@@ -113,11 +171,11 @@ function renderEmployeesTable() {
       </td>`;
 
     tr.querySelectorAll('button[data-action]').forEach(btn => {
-      btn.addEventListener('click', e => {
+      btn.onclick = (e) => {
         e.stopPropagation();
         if (btn.dataset.action === 'edit') openModal(btn.dataset.id);
         else deleteEmployee(btn.dataset.id);
-      });
+      };
     });
 
     tbody.appendChild(tr);
@@ -129,7 +187,8 @@ function renderAttendanceTable() {
   const tbody = document.getElementById('attendance-table-body');
   if (!tbody) return;
 
-  const dateStr = document.getElementById('attendance-date')?.value;
+  const dateInput = document.getElementById('attendance-date');
+  const dateStr = dateInput?.value;
   const active = allEmployees.filter(e => e.status === 'Actif');
 
   tbody.innerHTML = '';
@@ -163,7 +222,13 @@ function renderAttendanceTable() {
       </td>`;
 
     tr.querySelectorAll('button[data-status]').forEach(btn => {
-      btn.addEventListener('click', () => toggleAttendance(btn.dataset.id, dateStr, btn.dataset.status));
+      btn.onclick = () => {
+        try {
+          toggleAttendance(btn.dataset.id, dateStr, btn.dataset.status);
+        } catch (err) {
+          console.error("employees.js: Failed to toggle attendance:", err);
+        }
+      };
     });
 
     tbody.appendChild(tr);
@@ -205,7 +270,9 @@ function loadPayrollSummary() {
   if (!breakdown) return;
 
   const rolesMap = {};
-  active.forEach(e => { rolesMap[e.position] = (rolesMap[e.position] || 0) + 1; });
+  active.forEach(e => { 
+    if (e.position) rolesMap[e.position] = (rolesMap[e.position] || 0) + 1; 
+  });
 
   breakdown.innerHTML = '';
   if (Object.keys(rolesMap).length === 0) {
@@ -228,55 +295,83 @@ function openModal(empId = null) {
   const form = document.getElementById('emp-form');
   const title = document.getElementById('emp-modal-title');
   const posOtherWrapper = document.getElementById('emp-position-other-wrapper');
-  form.reset();
+  if (form) form.reset();
   if (posOtherWrapper) posOtherWrapper.style.display = 'none';
 
   if (empId) {
     const emp = allEmployees.find(e => e.id === empId);
     if (emp) {
-      title && (title.innerText = "Modifier l'Employé");
-      document.getElementById('emp-id').value = emp.id;
-      document.getElementById('emp-name').value = emp.name || '';
-      document.getElementById('emp-phone').value = emp.phone || '';
-      document.getElementById('emp-salary').value = emp.salary || '';
-      document.getElementById('emp-hiring-date').value = emp.hireDate || '';
-      document.getElementById('emp-status').value = emp.status || 'Actif';
+      if (title) title.innerText = "Modifier l'Employé";
+      
+      const idEl = document.getElementById('emp-id');
+      const nameEl = document.getElementById('emp-name');
+      const phoneEl = document.getElementById('emp-phone');
+      const salaryEl = document.getElementById('emp-salary');
+      const hireDateEl = document.getElementById('emp-hiring-date');
+      const statusEl = document.getElementById('emp-status');
+      const posEl = document.getElementById('emp-position');
+
+      if (idEl) idEl.value = emp.id;
+      if (nameEl) nameEl.value = emp.name || '';
+      if (phoneEl) phoneEl.value = emp.phone || '';
+      if (salaryEl) salaryEl.value = emp.salary || '';
+      if (hireDateEl) hireDateEl.value = emp.hireDate || '';
+      if (statusEl) statusEl.value = emp.status || 'Actif';
 
       const stdPositions = ['Chef Serveur','Serveur','Décoratrice','Technicien Son & Lumière','Responsable Cuisine','Agent Sécurité'];
-      if (stdPositions.includes(emp.position)) {
-        document.getElementById('emp-position').value = emp.position;
-      } else {
-        document.getElementById('emp-position').value = 'Autre';
-        if (posOtherWrapper) posOtherWrapper.style.display = 'block';
-        const otherInput = document.getElementById('emp-position-other');
-        if (otherInput) otherInput.value = emp.position;
+      if (posEl) {
+        if (stdPositions.includes(emp.position)) {
+          posEl.value = emp.position;
+        } else {
+          posEl.value = 'Autre';
+          if (posOtherWrapper) posOtherWrapper.style.display = 'block';
+          const otherInput = document.getElementById('emp-position-other');
+          if (otherInput) otherInput.value = emp.position || '';
+        }
       }
     }
   } else {
-    title && (title.innerText = 'Nouvel Employé');
-    document.getElementById('emp-id').value = '';
-    document.getElementById('emp-status').value = 'Actif';
-    document.getElementById('emp-hiring-date').value = new Date().toISOString().split('T')[0];
+    if (title) title.innerText = 'Nouvel Employé';
+    const idEl = document.getElementById('emp-id');
+    const statusEl = document.getElementById('emp-status');
+    const hireDateEl = document.getElementById('emp-hiring-date');
+    
+    if (idEl) idEl.value = '';
+    if (statusEl) statusEl.value = 'Actif';
+    if (hireDateEl) hireDateEl.value = new Date().toISOString().split('T')[0];
   }
 
-  document.getElementById('emp-modal')?.classList.add('open');
+  const modal = document.getElementById('emp-modal');
+  if (modal) modal.classList.add('open');
 }
 
 function closeModal() {
-  document.getElementById('emp-modal')?.classList.remove('open');
+  const modal = document.getElementById('emp-modal');
+  if (modal) modal.classList.remove('open');
   editingId = null;
 }
 
 async function handleFormSubmit(e) {
   e.preventDefault();
-  const name = document.getElementById('emp-name').value.trim();
-  const posSelect = document.getElementById('emp-position').value;
-  const posOther = document.getElementById('emp-position-other')?.value.trim();
+  
+  const nameEl = document.getElementById('emp-name');
+  const posSelectEl = document.getElementById('emp-position');
+  const posOtherEl = document.getElementById('emp-position-other');
+  const phoneEl = document.getElementById('emp-phone');
+  const salaryEl = document.getElementById('emp-salary');
+  const hireDateEl = document.getElementById('emp-hiring-date');
+  const statusEl = document.getElementById('emp-status');
+
+  if (!nameEl || !posSelectEl || !phoneEl || !salaryEl || !hireDateEl || !statusEl) return;
+
+  const name = nameEl.value.trim();
+  const posSelect = posSelectEl.value;
+  const posOther = posOtherEl ? posOtherEl.value.trim() : '';
   const position = posSelect === 'Autre' ? posOther : posSelect;
-  const phone = document.getElementById('emp-phone').value.trim();
-  const salary = parseFloat(document.getElementById('emp-salary').value) || 0;
-  const hireDate = document.getElementById('emp-hiring-date').value;
-  const status = document.getElementById('emp-status').value;
+  const phone = phoneEl.value.trim();
+  const salary = parseFloat(salaryEl.value) || 0;
+  const hireDate = hireDateEl.value;
+  const status = statusEl.value;
 
   const payload = { name, position, phone, salary, hireDate, status };
 

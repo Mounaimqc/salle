@@ -10,21 +10,56 @@ import {
   where, getDocs, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
+console.log('clients.js: Imports loaded successfully');
+
 let allClients = [];
 let allReservations = [];
 let selectedClientId = null;
 let editingId = null;
 
-window.addEventListener('authSessionLoaded', () => {
-  listenToClients();
-  listenToReservations();
-  bindUIEvents();
-
-  // Check if redirected to add a new client
-  if (new URLSearchParams(window.location.search).get('addNew') === 'true') {
-    openModal();
+window.addEventListener('authSessionLoaded', async () => {
+  console.log('clients.js: authSessionLoaded event received');
+  try {
+    await initClientsPage();
+  } catch (error) {
+    console.error('clients.js: Page initialization failed:', error);
+    const { showFatalError } = await import("./auth.js");
+    showFatalError(error);
   }
 });
+
+async function initClientsPage() {
+  console.log('clients.js: Initializing clients CRM page');
+
+  try {
+    listenToClients();
+  } catch (err) {
+    console.error("clients.js: Failed to start clients listener:", err);
+  }
+
+  try {
+    listenToReservations();
+  } catch (err) {
+    console.error("clients.js: Failed to start reservations listener:", err);
+  }
+
+  try {
+    bindUIEvents();
+  } catch (err) {
+    console.error("clients.js: Failed to bind UI events:", err);
+  }
+
+  // Check if redirected to add a new client
+  try {
+    if (new URLSearchParams(window.location.search).get('addNew') === 'true') {
+      openModal();
+    }
+  } catch (err) {
+    console.error("clients.js: Failed to check search params:", err);
+  }
+
+  console.log('clients.js: CRM page initialization completed');
+}
 
 // ─── Firestore Listeners ───────────────────────────────────────────────────
 function listenToClients() {
@@ -32,7 +67,11 @@ function listenToClients() {
   onSnapshot(q, (snapshot) => {
     allClients = [];
     snapshot.forEach(d => allClients.push({ id: d.id, ...d.data() }));
-    renderTable();
+    try {
+      renderTable();
+    } catch (err) {
+      console.error("clients.js: Error rendering table:", err);
+    }
   }, err => showToast('Erreur', err.message, 'danger'));
 }
 
@@ -41,17 +80,32 @@ function listenToReservations() {
     allReservations = [];
     snapshot.forEach(d => allReservations.push({ id: d.id, ...d.data() }));
     // Refresh profile if one is selected
-    if (selectedClientId) showClientProfile(selectedClientId);
-  });
+    if (selectedClientId) {
+      try {
+        showClientProfile(selectedClientId);
+      } catch (err) {
+        console.error("clients.js: Error showing client profile on reservation change:", err);
+      }
+    }
+  }, err => console.error("clients.js: Error listening to reservations:", err));
 }
 
 // ─── UI Events ─────────────────────────────────────────────────────────────
 function bindUIEvents() {
-  document.getElementById('open-add-client-btn')?.addEventListener('click', () => openModal());
-  document.getElementById('close-client-modal')?.addEventListener('click', closeModal);
-  document.getElementById('cancel-client-btn')?.addEventListener('click', closeModal);
-  document.getElementById('client-form')?.addEventListener('submit', handleFormSubmit);
-  document.getElementById('search-clients')?.addEventListener('input', renderTable);
+  const addBtn = document.getElementById('open-add-client-btn');
+  if (addBtn) addBtn.onclick = () => openModal();
+
+  const closeBtn = document.getElementById('close-client-modal');
+  if (closeBtn) closeBtn.onclick = () => closeModal();
+
+  const cancelBtn = document.getElementById('cancel-client-btn');
+  if (cancelBtn) cancelBtn.onclick = () => closeModal();
+
+  const form = document.getElementById('client-form');
+  if (form) form.addEventListener('submit', handleFormSubmit);
+
+  const searchInput = document.getElementById('search-clients');
+  if (searchInput) searchInput.addEventListener('input', () => renderTable());
 }
 
 // ─── Render Table ──────────────────────────────────────────────────────────
@@ -60,7 +114,8 @@ function renderTable() {
   const empty = document.getElementById('clients-empty-state');
   if (!tbody) return;
 
-  const search = (document.getElementById('search-clients')?.value || '').toLowerCase();
+  const searchInput = document.getElementById('search-clients');
+  const search = (searchInput?.value || '').toLowerCase();
 
   const filtered = allClients.filter(c =>
     (c.name || '').toLowerCase().includes(search) ||
@@ -89,7 +144,7 @@ function renderTable() {
 
     tr.innerHTML = `
       <td>
-        <div style="font-weight:600;">${client.name}</div>
+        <div style="font-weight:600;">${client.name || '—'}</div>
         <div style="font-size:0.75rem;color:var(--text-light);">${client.address || '—'}</div>
       </td>
       <td>${client.phone || '—'}</td>
@@ -103,18 +158,18 @@ function renderTable() {
       </td>`;
 
     tr.querySelectorAll('button[data-action]').forEach(btn => {
-      btn.addEventListener('click', e => {
+      btn.onclick = (e) => {
         e.stopPropagation();
         if (btn.dataset.action === 'edit') openModal(btn.dataset.id);
         else deleteClient(btn.dataset.id);
-      });
+      };
     });
 
-    tr.addEventListener('click', () => {
+    tr.onclick = () => {
       selectedClientId = client.id;
       renderTable();
       showClientProfile(client.id);
-    });
+    };
 
     tbody.appendChild(tr);
   });
@@ -154,8 +209,8 @@ function showClientProfile(clientId) {
         return `
           <div style="background:var(--bg-app);border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:10px;font-size:0.82rem;margin-bottom:8px;">
             <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-              <strong>${res.eventType}</strong>
-              <span class="badge ${badge}" style="font-size:0.7rem;padding:2px 8px;">${res.status}</span>
+              <strong>${res.eventType || 'Événement'}</strong>
+              <span class="badge ${badge}" style="font-size:0.7rem;padding:2px 8px;">${res.status || 'En attente'}</span>
             </div>
             <div style="color:var(--text-muted);">Date: ${d} — ${(res.totalAmount||0).toLocaleString()} ${sym}</div>
             ${res.remainingAmount > 0 ? `<div style="color:var(--danger);font-weight:600;">Reste: ${res.remainingAmount.toLocaleString()} ${sym}</div>` : ''}
@@ -196,39 +251,58 @@ function openModal(clientId = null) {
   editingId = clientId;
   const form = document.getElementById('client-form');
   const title = document.getElementById('client-modal-title');
-  form.reset();
+  if (form) form.reset();
 
   if (clientId) {
     const c = allClients.find(cl => cl.id === clientId);
     if (c) {
-      title && (title.innerText = 'Modifier le Client');
-      document.getElementById('client-id').value = c.id;
-      document.getElementById('client-name').value = c.name || '';
-      document.getElementById('client-phone').value = c.phone || '';
-      document.getElementById('client-email').value = c.email || '';
-      document.getElementById('client-address').value = c.address || '';
-      document.getElementById('client-notes').value = c.notes || '';
+      if (title) title.innerText = 'Modifier le Client';
+      const idEl = document.getElementById('client-id');
+      const nameEl = document.getElementById('client-name');
+      const phoneEl = document.getElementById('client-phone');
+      const emailEl = document.getElementById('client-email');
+      const addressEl = document.getElementById('client-address');
+      const notesEl = document.getElementById('client-notes');
+
+      if (idEl) idEl.value = c.id;
+      if (nameEl) nameEl.value = c.name || '';
+      if (phoneEl) phoneEl.value = c.phone || '';
+      if (emailEl) emailEl.value = c.email || '';
+      if (addressEl) addressEl.value = c.address || '';
+      if (notesEl) notesEl.value = c.notes || '';
     }
   } else {
-    title && (title.innerText = 'Nouveau Client');
-    document.getElementById('client-id').value = '';
+    if (title) title.innerText = 'Nouveau Client';
+    const idEl = document.getElementById('client-id');
+    if (idEl) idEl.value = '';
   }
-  document.getElementById('client-modal')?.classList.add('open');
+  
+  const modal = document.getElementById('client-modal');
+  if (modal) modal.classList.add('open');
 }
 
 function closeModal() {
-  document.getElementById('client-modal')?.classList.remove('open');
+  const modal = document.getElementById('client-modal');
+  if (modal) modal.classList.remove('open');
   editingId = null;
 }
 
 // ─── Form Submit ───────────────────────────────────────────────────────────
 async function handleFormSubmit(e) {
   e.preventDefault();
-  const name = document.getElementById('client-name').value.trim();
-  const phone = document.getElementById('client-phone').value.trim();
-  const email = document.getElementById('client-email').value.trim();
-  const address = document.getElementById('client-address').value.trim();
-  const notes = document.getElementById('client-notes').value.trim();
+  const nameEl = document.getElementById('client-name');
+  const phoneEl = document.getElementById('client-phone');
+  const emailEl = document.getElementById('client-email');
+  const addressEl = document.getElementById('client-address');
+  const notesEl = document.getElementById('client-notes');
+
+  if (!nameEl || !phoneEl) return;
+
+  const name = nameEl.value.trim();
+  const phone = phoneEl.value.trim();
+  const email = emailEl ? emailEl.value.trim() : '';
+  const address = addressEl ? addressEl.value.trim() : '';
+  const notes = notesEl ? notesEl.value.trim() : '';
   const payload = { name, phone, email, address, notes };
 
   try {

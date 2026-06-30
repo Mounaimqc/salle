@@ -8,24 +8,36 @@ import {
   doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc, addDoc
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-document.addEventListener('DOMContentLoaded', () => {
-  loadSettingsForm();
+console.log('settings.js: Imports loaded successfully');
 
-  // Settings form submission
-  document.getElementById('settings-hall-form')?.addEventListener('submit', handleSettingsSubmit);
-
-  // Devise change listener (update currency name display)
-  const currencySelect = document.getElementById('settings-currency');
-  currencySelect?.addEventListener('change', updateCurrencyNameDisplay);
-
-  // Preferences triggers
-  initPreferencesToggles();
-
-  // Backup & Restore
-  const exportBtn = document.getElementById('backup-export-btn');
-  if (exportBtn) exportBtn.onclick = exportDatabaseBackup;
-  document.getElementById('backup-import-file')?.addEventListener('change', importDatabaseBackup);
+window.addEventListener('authSessionLoaded', async () => {
+  console.log('settings.js: authSessionLoaded event received');
+  try {
+    await initSettingsPage();
+  } catch (error) {
+    console.error('settings.js: Page initialization failed:', error);
+    const { showFatalError } = await import("./auth.js");
+    showFatalError(error);
+  }
 });
+
+async function initSettingsPage() {
+  console.log('settings.js: Initializing settings page');
+
+  try {
+    await loadSettingsForm();
+  } catch (err) {
+    console.error("settings.js: Failed to load settings form:", err);
+  }
+
+  try {
+    bindUIEvents();
+  } catch (err) {
+    console.error("settings.js: Failed to bind UI events:", err);
+  }
+
+  console.log('settings.js: Page initialization completed');
+}
 
 /**
  * Load current configurations into form inputs from Firestore
@@ -56,7 +68,7 @@ async function loadSettingsForm() {
       if (notifToggle) notifToggle.checked = settings.notifications !== false;
     }
   } catch (err) {
-    console.error("Error loading settings from Firestore:", err);
+    console.error("settings.js: Error loading settings from Firestore:", err);
   }
 }
 
@@ -77,6 +89,44 @@ function updateCurrencyNameDisplay() {
   else if (symbol === '£') currencyCode = 'GBP';
 
   nameInput.value = currencyCode;
+}
+
+/**
+ * Bind UI Events
+ */
+function bindUIEvents() {
+  // Settings form submission
+  document.getElementById('settings-hall-form')?.addEventListener('submit', handleSettingsSubmit);
+
+  // Devise change listener (update currency name display)
+  const currencySelect = document.getElementById('settings-currency');
+  currencySelect?.addEventListener('change', updateCurrencyNameDisplay);
+
+  // Preferences triggers
+  initPreferencesToggles();
+
+  // Backup & Restore
+  const exportBtn = document.getElementById('backup-export-btn');
+  if (exportBtn) {
+    exportBtn.onclick = () => {
+      try {
+        exportDatabaseBackup();
+      } catch (err) {
+        console.error("settings.js: Failed to export database backup:", err);
+      }
+    };
+  }
+
+  const importInput = document.getElementById('backup-import-file');
+  if (importInput) {
+    importInput.addEventListener('change', (e) => {
+      try {
+        importDatabaseBackup(e);
+      } catch (err) {
+        console.error("settings.js: Failed to import database backup:", err);
+      }
+    });
+  }
 }
 
 /**
@@ -144,7 +194,7 @@ function initPreferencesToggles() {
       showToast('Thème mis à jour', `Mode ${newTheme === 'dark' ? 'sombre' : 'clair'} activé.`, 'info');
       window.dispatchEvent(new Event('themeChanged'));
     } catch (err) {
-      console.error("Error saving theme preference to Firestore:", err);
+      console.error("settings.js: Error saving theme preference to Firestore:", err);
     }
   });
 

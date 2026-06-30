@@ -14,22 +14,70 @@ import {
   updateDoc
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
+console.log('app.js: Imports loaded successfully');
+
 // Global currency configuration
 export let currentCurrencySymbol = "€";
 export let currentCurrencyCode = "EUR";
 
 // Inject common layout elements
-document.addEventListener('DOMContentLoaded', () => {
-  renderLayoutShell();
-  subscribeToSettings();
-  subscribeToStockAlerts();
-  checkTomorrowEventAlert();
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    await initializeAppShell();
+  } catch (error) {
+    console.error('app.js: Page initialization failed:', error);
+    // Fail gracefully: dismiss loader so page is visible
+    const { removeLoaderOverlay } = await import("./auth.js");
+    removeLoaderOverlay();
+  }
 });
 
 // Watch for authentication session loads to update header profile details
 window.addEventListener('authSessionLoaded', () => {
-  updateUserProfileDisplay();
+  console.log('app.js: authSessionLoaded event triggered');
+  try {
+    updateUserProfileDisplay();
+  } catch (error) {
+    console.error('app.js: Failed to update user profile display on event:', error);
+  }
 });
+
+/**
+ * Initialize all core app shell layouts and settings
+ */
+async function initializeAppShell() {
+  console.log('app.js: Starting App Shell initialization');
+
+  // 1. Render layout shell structure
+  try {
+    renderLayoutShell();
+  } catch (error) {
+    console.error('app.js: Layout shell rendering crashed:', error);
+  }
+
+  // 2. Subscribe to Firebase settings (theme, currency, logo, etc.)
+  try {
+    subscribeToSettings();
+  } catch (error) {
+    console.error('app.js: Settings subscription crashed:', error);
+  }
+
+  // 3. Subscribe to stock collection for alerts
+  try {
+    subscribeToStockAlerts();
+  } catch (error) {
+    console.error('app.js: Stock alerts subscription crashed:', error);
+  }
+
+  // 4. Perform tomorrow event reminder alert check
+  try {
+    await checkTomorrowEventAlert();
+  } catch (error) {
+    console.error('app.js: Tomorrow event alert check crashed:', error);
+  }
+
+  console.log('app.js: App Shell initialization completed');
+}
 
 /**
  * Render Sidebar and Top Navbar Markup
@@ -38,7 +86,10 @@ function renderLayoutShell() {
   const sidebarContainer = document.getElementById('sidebar-container');
   const navbarContainer = document.getElementById('navbar-container');
 
-  if (!sidebarContainer && !navbarContainer) return;
+  if (!sidebarContainer && !navbarContainer) {
+    console.log('app.js: Neither sidebar nor navbar containers found. Skipping shell rendering.');
+    return;
+  }
 
   const currentPath = window.location.pathname;
   const pageName = currentPath.substring(currentPath.lastIndexOf('/') + 1) || 'index.html';
@@ -86,7 +137,7 @@ function renderLayoutShell() {
             <i class="fa-solid fa-gears"></i>
             <span class="menu-item-text">Paramètres</span>
           </a>
-          <button id="sidebar-logout-btn" class="menu-item-link text-danger" style="margin-top: auto; background:none; border:none; width:100%; text-align:left;">
+          <button id="sidebar-logout-btn" class="menu-item-link text-danger" style="margin-top: auto; background:none; border:none; width:100%; text-align:left; cursor:pointer;">
             <i class="fa-solid fa-right-from-bracket" style="color: var(--danger);"></i>
             <span class="menu-item-text">Déconnexion</span>
           </button>
@@ -104,7 +155,10 @@ function renderLayoutShell() {
       </aside>
     `;
 
-    document.getElementById('sidebar-logout-btn').addEventListener('click', logoutUser);
+    const logoutBtn = document.getElementById('sidebar-logout-btn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', logoutUser);
+    }
   }
 
   // 2. Render Navbar
@@ -140,7 +194,7 @@ function renderLayoutShell() {
               <span class="badge-dot" id="notif-badge" style="display: none;"></span>
             </button>
           </div>
-          <div class="user-profile-nav" onclick="window.location.href='settings.html'">
+          <div class="user-profile-nav" id="navbar-user-profile-click">
             <div class="user-avatar-wrapper">
               <img id="navbar-user-avatar" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=100" alt="Avatar" class="user-avatar">
               <div class="user-status-dot"></div>
@@ -155,6 +209,11 @@ function renderLayoutShell() {
       <!-- Mobile sidebar overlay -->
       <div class="sidebar-overlay" id="sidebar-overlay-trigger"></div>
     `;
+
+    const profileClick = document.getElementById('navbar-user-profile-click');
+    if (profileClick) {
+      profileClick.onclick = () => { window.location.href = 'settings.html'; };
+    }
 
     initNavbarInteractions();
   }
@@ -177,20 +236,17 @@ function updateUserProfileDisplay() {
   const navbarName = document.getElementById('navbar-user-name');
   const navbarRole = document.getElementById('navbar-user-role');
 
-  if (sidebarName) sidebarName.innerText = userData.name;
-  if (sidebarRole) sidebarRole.innerText = userData.role;
-  if (navbarName) navbarName.innerText = userData.name;
-  if (navbarRole) navbarRole.innerText = userData.role;
+  if (sidebarName) sidebarName.innerText = userData.name || 'Admin';
+  if (sidebarRole) sidebarRole.innerText = userData.role || 'Propriétaire';
+  if (navbarName) navbarName.innerText = userData.name || 'Admin';
+  if (navbarRole) navbarRole.innerText = userData.role || 'Propriétaire';
 
   // Render initials avatar if no photo URL exists
   if (userData.logo) {
-    const avatars = [
-      document.getElementById('sidebar-user-avatar'),
-      document.getElementById('navbar-user-avatar')
-    ];
-    avatars.forEach(avatar => {
-      if (avatar) avatar.src = userData.logo;
-    });
+    const sidebarAvatar = document.getElementById('sidebar-user-avatar');
+    const navbarAvatar = document.getElementById('navbar-user-avatar');
+    if (sidebarAvatar) sidebarAvatar.src = userData.logo;
+    if (navbarAvatar) navbarAvatar.src = userData.logo;
   }
 }
 
@@ -233,6 +289,8 @@ function subscribeToSettings() {
       // Dispatch global settings updated event
       window.dispatchEvent(new CustomEvent('spSettingsUpdated', { detail: settings }));
     }
+  }, (err) => {
+    console.error("app.js: Error listening to settings document:", err);
   });
 }
 
@@ -240,11 +298,10 @@ function subscribeToSettings() {
  * Handle Theme toggle and sidebar collapse bindings
  */
 function initNavbarInteractions() {
-  const container = document.getElementById('app-root');
+  const container = document.getElementById('app-root') || document.getElementById('app-container');
   const toggleBtn = document.getElementById('toggle-sidebar-trigger');
   const overlay = document.getElementById('sidebar-overlay-trigger');
   const themeBtn = document.getElementById('theme-toggle-btn');
-  const notifBtn = document.getElementById('notif-btn');
 
   // Sidebar Collapse state reload
   const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
@@ -254,26 +311,26 @@ function initNavbarInteractions() {
 
   // Sidebar Collapse Toggle
   if (toggleBtn && container) {
-    toggleBtn.addEventListener('click', () => {
+    toggleBtn.onclick = () => {
       if (window.innerWidth > 991) {
         container.classList.toggle('sidebar-collapsed');
         localStorage.setItem('sidebar_collapsed', container.classList.contains('sidebar-collapsed'));
       } else {
         container.classList.toggle('sidebar-open');
       }
-    });
+    };
   }
 
   // Mobile overlay
   if (overlay && container) {
-    overlay.addEventListener('click', () => {
+    overlay.onclick = () => {
       container.classList.remove('sidebar-open');
-    });
+    };
   }
 
   // Dark/Light Theme Button Click
   if (themeBtn) {
-    themeBtn.addEventListener('click', async () => {
+    themeBtn.onclick = async () => {
       const activeTheme = document.documentElement.getAttribute('data-theme');
       const isDarkMode = activeTheme !== 'dark';
       
@@ -281,9 +338,9 @@ function initNavbarInteractions() {
         await updateDoc(doc(db, "settings", "hall_settings"), { darkMode: isDarkMode });
         showToast('Thème mis à jour', `Mode ${isDarkMode ? 'sombre' : 'clair'} activé.`, 'info');
       } catch (err) {
-        console.error("Error saving theme preference: ", err);
+        console.error("app.js: Error saving theme preference:", err);
       }
-    });
+    };
   }
 }
 
@@ -307,15 +364,10 @@ function subscribeToStockAlerts() {
     const notifBtn = document.getElementById('notif-btn');
     
     if (badge) {
-      if (lowStockItemsList.length > 0) {
-        badge.style.display = 'block';
-      } else {
-        badge.style.display = 'none';
-      }
+      badge.style.display = lowStockItemsList.length > 0 ? 'block' : 'none';
     }
 
     if (notifBtn) {
-      // Unbind previous if any and bind new alert toaster
       notifBtn.onclick = () => {
         if (lowStockItemsList.length > 0) {
           showToast('Alerte Stock', `Stocks bas pour : ${lowStockItemsList.join(', ')}`, 'warning');
@@ -324,6 +376,8 @@ function subscribeToStockAlerts() {
         }
       };
     }
+  }, (err) => {
+    console.error("app.js: Error listening to stock alerts:", err);
   });
 }
 
@@ -331,8 +385,7 @@ function subscribeToStockAlerts() {
  * Check if there is a booked event scheduled for tomorrow
  */
 async function checkTomorrowEventAlert() {
-  // Tomorrow's date relative to 2026-06-30 is 2026-07-01
-  const tomorrowStr = "2026-07-01";
+  const tomorrowStr = "2026-07-01"; // Simulated tomorrow date for testing
   
   try {
     const q = query(
@@ -351,7 +404,7 @@ async function checkTomorrowEventAlert() {
       });
     }
   } catch (err) {
-    console.error("Error checking upcoming events: ", err);
+    console.error("app.js: Error checking upcoming tomorrow events:", err);
   }
 }
 
@@ -387,17 +440,23 @@ export function showToast(title, message, type = 'success') {
   container.appendChild(toast);
 
   const closeBtn = toast.querySelector('.toast-close');
-  closeBtn.addEventListener('click', () => {
-    toast.style.transform = 'translateY(20px)';
-    toast.style.opacity = '0';
-    setTimeout(() => toast.remove(), 300);
-  });
+  if (closeBtn) {
+    closeBtn.onclick = () => {
+      toast.style.transform = 'translateY(20px)';
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) toast.remove();
+      }, 300);
+    };
+  }
 
   setTimeout(() => {
     if (toast.parentNode) {
       toast.style.transform = 'translateY(20px)';
       toast.style.opacity = '0';
-      setTimeout(() => toast.remove(), 300);
+      setTimeout(() => {
+        if (toast.parentNode) toast.remove();
+      }, 300);
     }
   }, 4500);
 }

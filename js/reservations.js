@@ -10,24 +10,59 @@ import {
   getDocs, where, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
+console.log('reservations.js: Imports loaded successfully');
+
 let allReservations = [];
 let allClients = [];
 let editingId = null;
 let currentSettings = {};
 
-window.addEventListener('authSessionLoaded', () => {
-  initReservationsPage();
+window.addEventListener('authSessionLoaded', async () => {
+  console.log('reservations.js: authSessionLoaded event received');
+  try {
+    await initReservationsPage();
+  } catch (error) {
+    console.error('reservations.js: Page initialization failed:', error);
+    const { showFatalError } = await import("./auth.js");
+    showFatalError(error);
+  }
 });
 
 window.addEventListener('spSettingsUpdated', (e) => {
   currentSettings = e.detail || {};
 });
 
-function initReservationsPage() {
-  listenToReservations();
-  listenToClients();
-  bindUIEvents();
-  checkQueryParams();
+async function initReservationsPage() {
+  console.log('reservations.js: Initializing reservations page');
+
+  // 1. Real-time Firestore Listeners
+  try {
+    listenToReservations();
+  } catch (err) {
+    console.error("reservations.js: Failed to start reservations listener:", err);
+  }
+
+  try {
+    listenToClients();
+  } catch (err) {
+    console.error("reservations.js: Failed to start clients listener:", err);
+  }
+
+  // 2. UI Bindings
+  try {
+    bindUIEvents();
+  } catch (err) {
+    console.error("reservations.js: Failed to bind UI events:", err);
+  }
+
+  // 3. Check Query Parameters
+  try {
+    checkQueryParams();
+  } catch (err) {
+    console.error("reservations.js: Failed to check query parameters:", err);
+  }
+
+  console.log('reservations.js: Page initialization completed');
 }
 
 // ─── Real-time Firestore Listener ──────────────────────────────────────────
@@ -36,7 +71,11 @@ function listenToReservations() {
   onSnapshot(q, (snapshot) => {
     allReservations = [];
     snapshot.forEach(d => allReservations.push({ id: d.id, ...d.data() }));
-    renderTable();
+    try {
+      renderTable();
+    } catch (err) {
+      console.error("reservations.js: Error rendering table:", err);
+    }
   }, err => showToast('Erreur', err.message, 'danger'));
 }
 
@@ -44,8 +83,12 @@ function listenToClients() {
   onSnapshot(collection(db, "clients"), (snapshot) => {
     allClients = [];
     snapshot.forEach(d => allClients.push({ id: d.id, ...d.data() }));
-    populateClientsDropdown();
-  }, err => console.error("Error listening to clients:", err));
+    try {
+      populateClientsDropdown();
+    } catch (err) {
+      console.error("reservations.js: Error populating clients dropdown:", err);
+    }
+  }, err => console.error("reservations.js: Error listening to clients:", err));
 }
 
 function populateClientsDropdown() {
@@ -66,55 +109,81 @@ function populateClientsDropdown() {
 
 // ─── UI Event Bindings ─────────────────────────────────────────────────────
 function bindUIEvents() {
-  document.getElementById('open-add-modal-btn').addEventListener('click', () => openModal());
+  const openAddBtn = document.getElementById('open-add-modal-btn');
+  if (openAddBtn) {
+    openAddBtn.onclick = () => openModal();
+  }
 
-  document.getElementById('close-booking-modal')?.addEventListener('click', closeModal);
-  document.getElementById('cancel-booking-btn')?.addEventListener('click', closeModal);
+  const closeBookingBtn = document.getElementById('close-booking-modal');
+  if (closeBookingBtn) {
+    closeBookingBtn.onclick = () => closeModal();
+  }
 
-  document.getElementById('booking-form').addEventListener('submit', handleFormSubmit);
+  const cancelBookingBtn = document.getElementById('cancel-booking-btn');
+  if (cancelBookingBtn) {
+    cancelBookingBtn.onclick = () => closeModal();
+  }
+
+  const form = document.getElementById('booking-form');
+  if (form) {
+    form.addEventListener('submit', handleFormSubmit);
+  }
 
   // Auto-fill phone on client selection
   const clientSelect = document.getElementById('booking-client-name');
   const phoneInput = document.getElementById('booking-client-phone');
-  clientSelect?.addEventListener('change', () => {
-    const selectedOption = clientSelect.options[clientSelect.selectedIndex];
-    phoneInput.value = selectedOption?.dataset.phone || '';
-  });
+  if (clientSelect && phoneInput) {
+    clientSelect.addEventListener('change', () => {
+      const selectedOption = clientSelect.options[clientSelect.selectedIndex];
+      phoneInput.value = selectedOption?.dataset.phone || '';
+    });
+  }
 
   // Auto-calculate remaining
   const total = document.getElementById('booking-total');
   const deposit = document.getElementById('booking-deposit');
   const remaining = document.getElementById('booking-remaining');
   const updateRemaining = () => {
-    const t = parseFloat(total.value) || 0;
-    const d = parseFloat(deposit.value) || 0;
-    remaining.value = Math.max(0, t - d);
+    if (total && deposit && remaining) {
+      const t = parseFloat(total.value) || 0;
+      const d = parseFloat(deposit.value) || 0;
+      remaining.value = Math.max(0, t - d);
+    }
   };
   total?.addEventListener('input', updateRemaining);
   deposit?.addEventListener('input', updateRemaining);
 
   // Filters
   ['search-bookings','filter-type','filter-status','filter-date-start','filter-date-end'].forEach(id => {
-    document.getElementById(id)?.addEventListener('input', renderTable);
-    document.getElementById(id)?.addEventListener('change', renderTable);
+    const el = document.getElementById(id);
+    el?.addEventListener('input', () => renderTable());
+    el?.addEventListener('change', () => renderTable());
   });
 
-  document.getElementById('reset-filters-btn')?.addEventListener('click', () => {
-    ['search-bookings','filter-type','filter-status'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.value = '';
-    });
-    ['filter-date-start','filter-date-end'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.value = '';
-    });
-    renderTable();
-  });
+  const resetFiltersBtn = document.getElementById('reset-filters-btn');
+  if (resetFiltersBtn) {
+    resetFiltersBtn.onclick = () => {
+      ['search-bookings','filter-type','filter-status'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      ['filter-date-start','filter-date-end'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      renderTable();
+    };
+  }
 
   // Receipt modal close
-  const closeReceipt = () => document.getElementById('receipt-modal')?.classList.remove('open');
-  document.getElementById('close-receipt-modal')?.addEventListener('click', closeReceipt);
-  document.getElementById('close-receipt-btn')?.addEventListener('click', closeReceipt);
+  const closeReceipt = () => {
+    const modal = document.getElementById('receipt-modal');
+    if (modal) modal.classList.remove('open');
+  };
+  const closeReceiptHeaderBtn = document.getElementById('close-receipt-modal');
+  const closeReceiptFooterBtn = document.getElementById('close-receipt-btn');
+  if (closeReceiptHeaderBtn) closeReceiptHeaderBtn.onclick = closeReceipt;
+  if (closeReceiptFooterBtn) closeReceiptFooterBtn.onclick = closeReceipt;
 }
 
 function checkQueryParams() {
@@ -128,7 +197,10 @@ function checkQueryParams() {
   const search = params.get('search');
   if (search) {
     const el = document.getElementById('search-bookings');
-    if (el) { el.value = search; renderTable(); }
+    if (el) { 
+      el.value = search; 
+      renderTable(); 
+    }
   }
 }
 
@@ -148,8 +220,8 @@ function renderTable() {
   const filtered = allReservations.filter(r => {
     const matchSearch = (r.clientName || '').toLowerCase().includes(search) ||
                         (r.notes || '').toLowerCase().includes(search);
-    const matchType = !typeFilter || r.eventType === typeFilter;
-    const matchStatus = !statusFilter || r.status === statusFilter;
+    const matchType = !typeFilter || typeFilter === 'all' || r.eventType === typeFilter;
+    const matchStatus = !statusFilter || statusFilter === 'all' || r.status === statusFilter;
     const matchDate = (!dateStart || r.eventDate >= dateStart) &&
                       (!dateEnd || r.eventDate <= dateEnd);
     return matchSearch && matchType && matchStatus && matchDate;
@@ -186,7 +258,7 @@ function renderTable() {
       <td style="font-weight:700;">${(res.totalAmount||0).toLocaleString()} ${sym}</td>
       <td style="color:var(--success);font-weight:500;">${(res.deposit||0).toLocaleString()} ${sym}</td>
       <td style="color:${(res.remainingAmount||0)>0?'var(--danger)':'var(--success)'};font-weight:700;">${(res.remainingAmount||0).toLocaleString()} ${sym}</td>
-      <td><span class="badge ${badge}">${res.status}</span></td>
+      <td><span class="badge ${badge}">${res.status || 'En attente'}</span></td>
       <td>
         <div style="display:flex;gap:6px;justify-content:center;">
           <button class="btn btn-outline btn-icon btn-sm" title="Reçu" style="color:var(--info);" data-action="receipt" data-id="${res.id}"><i class="fa-solid fa-receipt"></i></button>
@@ -197,14 +269,14 @@ function renderTable() {
 
     // Bind action buttons
     tr.querySelectorAll('button[data-action]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.onclick = (e) => {
         e.stopPropagation();
         const action = btn.dataset.action;
         const id = btn.dataset.id;
         if (action === 'edit') openModal(id);
         else if (action === 'delete') deleteReservation(id);
         else if (action === 'receipt') showReceipt(id);
-      });
+      };
     });
 
     tbody.appendChild(tr);
@@ -217,36 +289,52 @@ function openModal(reservationId = null) {
   const modal = document.getElementById('booking-modal');
   const title = document.getElementById('booking-modal-title');
   const form = document.getElementById('booking-form');
-  form.reset();
-  document.getElementById('booking-remaining').value = 0;
+  
+  if (form) form.reset();
+  const remainingEl = document.getElementById('booking-remaining');
+  if (remainingEl) remainingEl.value = 0;
 
   if (reservationId) {
     const res = allReservations.find(r => r.id === reservationId);
     if (res) {
-      title && (title.innerText = 'Modifier la Réservation');
-      document.getElementById('booking-id').value = res.id;
-      document.getElementById('booking-client-name').value = res.clientName || '';
-      document.getElementById('booking-client-phone').value = res.phone || '';
-      document.getElementById('booking-event-type').value = res.eventType || '';
-      document.getElementById('booking-event-date').value = res.eventDate || '';
-      document.getElementById('booking-guests').value = res.guests || '';
-      document.getElementById('booking-status').value = res.status || 'En attente';
-      document.getElementById('booking-total').value = res.totalAmount || '';
-      document.getElementById('booking-deposit').value = res.deposit || '';
-      document.getElementById('booking-remaining').value = res.remainingAmount || '';
-      document.getElementById('booking-notes').value = res.notes || '';
+      if (title) title.innerText = 'Modifier la Réservation';
+      const idEl = document.getElementById('booking-id');
+      const nameEl = document.getElementById('booking-client-name');
+      const phoneEl = document.getElementById('booking-client-phone');
+      const typeEl = document.getElementById('booking-event-type');
+      const dateEl = document.getElementById('booking-event-date');
+      const guestsEl = document.getElementById('booking-guests');
+      const statusEl = document.getElementById('booking-status');
+      const totalEl = document.getElementById('booking-total');
+      const depositEl = document.getElementById('booking-deposit');
+      const notesEl = document.getElementById('booking-notes');
+
+      if (idEl) idEl.value = res.id;
+      if (nameEl) nameEl.value = res.clientName || '';
+      if (phoneEl) phoneEl.value = res.phone || '';
+      if (typeEl) typeEl.value = res.eventType || '';
+      if (dateEl) dateEl.value = res.eventDate || '';
+      if (guestsEl) guestsEl.value = res.guests || '';
+      if (statusEl) statusEl.value = res.status || 'En attente';
+      if (totalEl) totalEl.value = res.totalAmount || '';
+      if (depositEl) depositEl.value = res.deposit || '';
+      if (remainingEl) remainingEl.value = res.remainingAmount || '';
+      if (notesEl) notesEl.value = res.notes || '';
     }
   } else {
-    title && (title.innerText = 'Nouvelle Réservation');
-    document.getElementById('booking-id').value = '';
-    document.getElementById('booking-status').value = 'En attente';
+    if (title) title.innerText = 'Nouvelle Réservation';
+    const idEl = document.getElementById('booking-id');
+    const statusEl = document.getElementById('booking-status');
+    if (idEl) idEl.value = '';
+    if (statusEl) statusEl.value = 'En attente';
   }
 
-  modal?.classList.add('open');
+  if (modal) modal.classList.add('open');
 }
 
 function closeModal() {
-  document.getElementById('booking-modal')?.classList.remove('open');
+  const modal = document.getElementById('booking-modal');
+  if (modal) modal.classList.remove('open');
   editingId = null;
 }
 
@@ -254,16 +342,28 @@ function closeModal() {
 async function handleFormSubmit(e) {
   e.preventDefault();
 
-  const clientName = document.getElementById('booking-client-name').value.trim();
-  const phone = document.getElementById('booking-client-phone').value.trim();
-  const eventType = document.getElementById('booking-event-type').value;
-  const eventDate = document.getElementById('booking-event-date').value;
-  const guests = parseInt(document.getElementById('booking-guests').value) || 0;
-  const status = document.getElementById('booking-status').value;
-  const totalAmount = parseFloat(document.getElementById('booking-total').value) || 0;
-  const deposit = parseFloat(document.getElementById('booking-deposit').value) || 0;
+  const nameEl = document.getElementById('booking-client-name');
+  const phoneEl = document.getElementById('booking-client-phone');
+  const typeEl = document.getElementById('booking-event-type');
+  const dateEl = document.getElementById('booking-event-date');
+  const guestsEl = document.getElementById('booking-guests');
+  const statusEl = document.getElementById('booking-status');
+  const totalEl = document.getElementById('booking-total');
+  const depositEl = document.getElementById('booking-deposit');
+  const notesEl = document.getElementById('booking-notes');
+
+  if (!nameEl || !typeEl || !dateEl || !totalEl || !statusEl) return;
+
+  const clientName = nameEl.value.trim();
+  const phone = phoneEl ? phoneEl.value.trim() : '';
+  const eventType = typeEl.value;
+  const eventDate = dateEl.value;
+  const guests = parseInt(guestsEl ? guestsEl.value : 0) || 0;
+  const status = statusEl.value;
+  const totalAmount = parseFloat(totalEl.value) || 0;
+  const deposit = parseFloat(depositEl ? depositEl.value : 0) || 0;
   const remainingAmount = Math.max(0, totalAmount - deposit);
-  const notes = document.getElementById('booking-notes').value.trim();
+  const notes = notesEl ? notesEl.value.trim() : '';
 
   if (deposit > totalAmount) {
     showToast('Validation', "L'acompte ne peut pas dépasser le montant total.", 'warning');
@@ -323,25 +423,46 @@ function showReceipt(id) {
   const sym = currentCurrencySymbol || '€';
   const settings = currentSettings;
 
-  document.getElementById('receipt-hall-name').innerText = settings?.hallName || 'SallePro';
-  document.getElementById('receipt-id').innerText = res.id;
-  document.getElementById('receipt-date').innerText = new Date().toLocaleDateString('fr-FR');
-  document.getElementById('receipt-client-name').innerText = res.clientName;
-  document.getElementById('receipt-client-phone').innerText = res.phone || '—';
-  document.getElementById('receipt-event-type').innerText = res.eventType;
-  document.getElementById('receipt-event-date').innerText = res.eventDate
+  const hallNameEl = document.getElementById('receipt-hall-name');
+  const receiptIdEl = document.getElementById('receipt-id');
+  const receiptDateEl = document.getElementById('receipt-date');
+  const clientNameEl = document.getElementById('receipt-client-name');
+  const clientPhoneEl = document.getElementById('receipt-client-phone');
+  const eventTypeEl = document.getElementById('receipt-event-type');
+  const eventDateEl = document.getElementById('receipt-event-date');
+  const guestsEl = document.getElementById('receipt-event-guests');
+  const totalValEl = document.getElementById('receipt-total-val');
+  const depositValEl = document.getElementById('receipt-deposit-val');
+  const remainingValEl = document.getElementById('receipt-remaining-val');
+
+  if (hallNameEl) hallNameEl.innerText = settings?.hallName || 'SallePro';
+  if (receiptIdEl) receiptIdEl.innerText = res.id;
+  if (receiptDateEl) receiptDateEl.innerText = new Date().toLocaleDateString('fr-FR');
+  if (clientNameEl) clientNameEl.innerText = res.clientName || '—';
+  if (clientPhoneEl) clientPhoneEl.innerText = res.phone || '—';
+  if (eventTypeEl) eventTypeEl.innerText = res.eventType || '—';
+  if (eventDateEl) eventDateEl.innerText = res.eventDate
     ? new Date(res.eventDate).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long', year:'numeric' })
     : '—';
-  document.getElementById('receipt-event-guests').innerText = `${res.guests} convives`;
-  document.getElementById('receipt-total-val').innerText = `${(res.totalAmount||0).toLocaleString()} ${sym}`;
-  document.getElementById('receipt-deposit-val').innerText = `${(res.deposit||0).toLocaleString()} ${sym}`;
-  document.getElementById('receipt-remaining-val').innerText = `${(res.remainingAmount||0).toLocaleString()} ${sym}`;
+  if (guestsEl) guestsEl.innerText = `${res.guests || 0} convives`;
+  if (totalValEl) totalValEl.innerText = `${(res.totalAmount||0).toLocaleString()} ${sym}`;
+  if (depositValEl) depositValEl.innerText = `${(res.deposit||0).toLocaleString()} ${sym}`;
+  if (remainingValEl) remainingValEl.innerText = `${(res.remainingAmount||0).toLocaleString()} ${sym}`;
 
-  // PDF mock download button
+  // PDF / TXT mock export button
   const pdfBtn = document.getElementById('receipt-export-pdf-btn');
-  if (pdfBtn) pdfBtn.onclick = () => exportReceiptText(res, settings, sym);
+  if (pdfBtn) {
+    pdfBtn.onclick = () => exportReceiptText(res, settings, sym);
+  }
 
-  document.getElementById('receipt-modal')?.classList.add('open');
+  // Print button
+  const printBtn = document.getElementById('print-receipt-btn');
+  if (printBtn) {
+    printBtn.onclick = () => window.print();
+  }
+
+  const modal = document.getElementById('receipt-modal');
+  if (modal) modal.classList.add('open');
 }
 
 function exportReceiptText(res, settings, sym) {
@@ -374,6 +495,8 @@ Reste dû  : ${(res.remainingAmount||0).toLocaleString()} ${sym}
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `facture_${res.id}.txt`;
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
   showToast('Téléchargement', 'Facture exportée.', 'success');
 }

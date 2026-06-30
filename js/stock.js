@@ -13,14 +13,40 @@ import {
   ref, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-storage.js";
 
+console.log('stock.js: Imports loaded successfully');
+
 let allStock = [];
 let editingId = null;
 let pendingImageFile = null;
 
-window.addEventListener('authSessionLoaded', () => {
-  listenToStock();
-  bindUIEvents();
+window.addEventListener('authSessionLoaded', async () => {
+  console.log('stock.js: authSessionLoaded event received');
+  try {
+    await initStockPage();
+  } catch (error) {
+    console.error('stock.js: Page initialization failed:', error);
+    const { showFatalError } = await import("./auth.js");
+    showFatalError(error);
+  }
 });
+
+async function initStockPage() {
+  console.log('stock.js: Initializing stock inventory page');
+
+  try {
+    listenToStock();
+  } catch (err) {
+    console.error("stock.js: Failed to start stock listener:", err);
+  }
+
+  try {
+    bindUIEvents();
+  } catch (err) {
+    console.error("stock.js: Failed to bind UI events:", err);
+  }
+
+  console.log('stock.js: Page initialization completed');
+}
 
 // ─── Real-time Listener ────────────────────────────────────────────────────
 function listenToStock() {
@@ -28,21 +54,32 @@ function listenToStock() {
   onSnapshot(q, (snapshot) => {
     allStock = [];
     snapshot.forEach(d => allStock.push({ id: d.id, ...d.data() }));
-    renderStockGrid();
+    try {
+      renderStockGrid();
+    } catch (err) {
+      console.error("stock.js: Error rendering stock grid:", err);
+    }
   }, err => showToast('Erreur', err.message, 'danger'));
 }
 
 // ─── UI Events ─────────────────────────────────────────────────────────────
 function bindUIEvents() {
-  document.getElementById('open-add-stock-btn')?.addEventListener('click', () => openModal());
-  document.getElementById('close-stock-modal')?.addEventListener('click', closeModal);
-  document.getElementById('cancel-stock-btn')?.addEventListener('click', closeModal);
-  document.getElementById('stock-form')?.addEventListener('submit', handleFormSubmit);
+  const addBtn = document.getElementById('open-add-stock-btn');
+  if (addBtn) addBtn.onclick = () => openModal();
+
+  const closeBtn = document.getElementById('close-stock-modal');
+  if (closeBtn) closeBtn.onclick = () => closeModal();
+
+  const cancelBtn = document.getElementById('cancel-stock-btn');
+  if (cancelBtn) cancelBtn.onclick = () => closeModal();
+
+  const form = document.getElementById('stock-form');
+  if (form) form.addEventListener('submit', handleFormSubmit);
 
   ['search-stock', 'filter-stock-category', 'filter-low-stock-only'].forEach(id => {
     const el = document.getElementById(id);
-    el?.addEventListener('input', renderStockGrid);
-    el?.addEventListener('change', renderStockGrid);
+    el?.addEventListener('input', () => renderStockGrid());
+    el?.addEventListener('change', () => renderStockGrid());
   });
 }
 
@@ -53,14 +90,18 @@ function renderStockGrid() {
   if (!container) return;
 
   const sym = currentCurrencySymbol || '€';
-  const search = (document.getElementById('search-stock')?.value || '').toLowerCase();
-  const catFilter = document.getElementById('filter-stock-category')?.value || '';
-  const lowOnly = document.getElementById('filter-low-stock-only')?.checked || false;
+  const searchInput = document.getElementById('search-stock');
+  const catFilterEl = document.getElementById('filter-stock-category');
+  const lowOnlyEl = document.getElementById('filter-low-stock-only');
+
+  const search = (searchInput?.value || '').toLowerCase();
+  const catFilter = catFilterEl?.value || '';
+  const lowOnly = lowOnlyEl?.checked || false;
 
   const filtered = allStock.filter(item => {
     const matchSearch = (item.itemName || '').toLowerCase().includes(search);
     const matchCat = !catFilter || item.category === catFilter;
-    const isLow = item.quantity <= item.minimumQuantity;
+    const isLow = (item.quantity || 0) <= (item.minimumQuantity || 0);
     return matchSearch && matchCat && (!lowOnly || isLow);
   });
 
@@ -73,7 +114,7 @@ function renderStockGrid() {
   if (empty) empty.style.display = 'none';
 
   filtered.forEach(item => {
-    const isLow = item.quantity <= item.minimumQuantity;
+    const isLow = (item.quantity || 0) <= (item.minimumQuantity || 0);
 
     // Category icon map
     const icons = {
@@ -95,15 +136,15 @@ function renderStockGrid() {
           : `<i class="fa-solid ${icon}"></i>`}
       </div>
       <div class="stock-card-body">
-        <div class="stock-card-title">${item.itemName}</div>
+        <div class="stock-card-title">${item.itemName || '—'}</div>
         <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.82rem;">
-          <span style="color:var(--text-muted);font-weight:600;"><i class="fa-solid fa-tags"></i> ${item.category}</span>
+          <span style="color:var(--text-muted);font-weight:600;"><i class="fa-solid fa-tags"></i> ${item.category || 'Général'}</span>
           <span style="font-weight:700;color:var(--color-secondary);">${(item.unitPrice || 0).toLocaleString()} ${sym}/u</span>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.82rem;">
-          <span style="color:var(--text-light);">Seuil: ${item.minimumQuantity} u</span>
+          <span style="color:var(--text-light);">Seuil: ${item.minimumQuantity || 0} u</span>
           <span style="font-weight:700;padding:4px 10px;border-radius:var(--radius-sm);background:${isLow ? 'var(--danger-light)' : 'var(--success-light)'};color:${isLow ? 'var(--danger)' : 'var(--success)'};">
-            ${item.quantity} unités
+            ${item.quantity || 0} unités
           </span>
         </div>
       </div>
@@ -117,10 +158,11 @@ function renderStockGrid() {
       </div>`;
 
     card.querySelectorAll('button[data-action]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
         if (btn.dataset.action === 'edit') openModal(btn.dataset.id);
         else deleteItem(btn.dataset.id);
-      });
+      };
     });
 
     container.appendChild(card);
@@ -133,31 +175,45 @@ function openModal(itemId = null) {
   pendingImageFile = null;
   const form = document.getElementById('stock-form');
   const title = document.getElementById('stock-modal-title');
-  form.reset();
+  if (form) form.reset();
 
   if (itemId) {
     const item = allStock.find(i => i.id === itemId);
     if (item) {
-      title && (title.innerText = "Modifier l'Article");
-      document.getElementById('stock-id').value = item.id;
-      document.getElementById('stock-name').value = item.itemName || '';
-      document.getElementById('stock-category').value = item.category || '';
-      document.getElementById('stock-quantity').value = item.quantity || 0;
-      document.getElementById('stock-min-alert').value = item.minimumQuantity || 0;
-      document.getElementById('stock-price').value = item.unitPrice || '';
+      if (title) title.innerText = "Modifier l'Article";
+      
+      const idEl = document.getElementById('stock-id');
+      const nameEl = document.getElementById('stock-name');
+      const categoryEl = document.getElementById('stock-category');
+      const quantityEl = document.getElementById('stock-quantity');
+      const minAlertEl = document.getElementById('stock-min-alert');
+      const priceEl = document.getElementById('stock-price');
+
+      if (idEl) idEl.value = item.id;
+      if (nameEl) nameEl.value = item.itemName || '';
+      if (categoryEl) categoryEl.value = item.category || '';
+      if (quantityEl) quantityEl.value = item.quantity || 0;
+      if (minAlertEl) minAlertEl.value = item.minimumQuantity || 0;
+      if (priceEl) priceEl.value = item.unitPrice || '';
     }
   } else {
-    title && (title.innerText = 'Ajouter un Article');
-    document.getElementById('stock-id').value = '';
-    document.getElementById('stock-quantity').value = 0;
-    document.getElementById('stock-min-alert').value = 10;
+    if (title) title.innerText = 'Ajouter un Article';
+    const idEl = document.getElementById('stock-id');
+    const quantityEl = document.getElementById('stock-quantity');
+    const minAlertEl = document.getElementById('stock-min-alert');
+
+    if (idEl) idEl.value = '';
+    if (quantityEl) quantityEl.value = 0;
+    if (minAlertEl) minAlertEl.value = 10;
   }
 
-  document.getElementById('stock-modal')?.classList.add('open');
+  const modal = document.getElementById('stock-modal');
+  if (modal) modal.classList.add('open');
 }
 
 function closeModal() {
-  document.getElementById('stock-modal')?.classList.remove('open');
+  const modal = document.getElementById('stock-modal');
+  if (modal) modal.classList.remove('open');
   editingId = null;
   pendingImageFile = null;
 }
@@ -166,14 +222,25 @@ function closeModal() {
 async function handleFormSubmit(e) {
   e.preventDefault();
 
-  const itemName = document.getElementById('stock-name').value.trim();
-  const category = document.getElementById('stock-category').value;
-  const quantity = parseInt(document.getElementById('stock-quantity').value) || 0;
-  const minimumQuantity = parseInt(document.getElementById('stock-min-alert').value) || 0;
-  const unitPrice = parseFloat(document.getElementById('stock-price').value) || 0;
+  const nameEl = document.getElementById('stock-name');
+  const categoryEl = document.getElementById('stock-category');
+  const quantityEl = document.getElementById('stock-quantity');
+  const minAlertEl = document.getElementById('stock-min-alert');
+  const priceEl = document.getElementById('stock-price');
+
+  if (!nameEl || !categoryEl || !quantityEl || !minAlertEl || !priceEl) return;
+
+  const itemName = nameEl.value.trim();
+  const category = categoryEl.value;
+  const quantity = parseInt(quantityEl.value) || 0;
+  const minimumQuantity = parseInt(minAlertEl.value) || 0;
+  const unitPrice = parseFloat(priceEl.value) || 0;
 
   const saveBtn = document.querySelector('#stock-form [type="submit"]');
-  if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Enregistrement...'; }
+  if (saveBtn) { 
+    saveBtn.disabled = true; 
+    saveBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Enregistrement...'; 
+  }
 
   try {
     let imageUrl = '';
@@ -206,7 +273,10 @@ async function handleFormSubmit(e) {
   } catch (err) {
     showToast('Erreur', err.message, 'danger');
   } finally {
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.innerText = 'Enregistrer'; }
+    if (saveBtn) { 
+      saveBtn.disabled = false; 
+      saveBtn.innerText = 'Enregistrer'; 
+    }
   }
 }
 

@@ -8,58 +8,119 @@ import {
   collection, onSnapshot, doc
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
+console.log('reports.js: Imports loaded successfully');
+
 let profitChart = null;
 let allReservations = [];
 let allExpenses = [];
 let currentSettings = {};
 
-document.addEventListener('DOMContentLoaded', () => {
-  initReportsPage();
-
-  // Bind dropdown filter
-  document.getElementById('report-year')?.addEventListener('change', () => {
-    renderReports();
-    showToast('Bilan actualisé', 'Affichage des données comptables de l\'exercice choisi.', 'info');
-  });
-
-  // Bind Export CSV button
-  const exportBtn = document.getElementById('export-csv-btn');
-  if (exportBtn) exportBtn.onclick = exportToCSV;
-
-  // Watch theme changes to refresh chart colors
-  window.addEventListener('spSettingsUpdated', () => {
-    renderReports();
-  });
+window.addEventListener('authSessionLoaded', async () => {
+  console.log('reports.js: authSessionLoaded event received');
+  try {
+    await initReportsPage();
+  } catch (error) {
+    console.error('reports.js: Page initialization failed:', error);
+    const { showFatalError } = await import("./auth.js");
+    showFatalError(error);
+  }
 });
 
-function initReportsPage() {
-  listenToSettings();
-  listenToReservations();
-  listenToExpenses();
+async function initReportsPage() {
+  console.log('reports.js: Initializing reports page');
+
+  try {
+    listenToSettings();
+  } catch (err) {
+    console.error("reports.js: Failed to start settings listener:", err);
+  }
+
+  try {
+    listenToReservations();
+  } catch (err) {
+    console.error("reports.js: Failed to start reservations listener:", err);
+  }
+
+  try {
+    listenToExpenses();
+  } catch (err) {
+    console.error("reports.js: Failed to start expenses listener:", err);
+  }
+
+  try {
+    bindUIEvents();
+  } catch (err) {
+    console.error("reports.js: Failed to bind UI events:", err);
+  }
+
+  console.log('reports.js: Page initialization completed');
 }
 
 function listenToSettings() {
   onSnapshot(doc(db, "settings", "hall_settings"), (docSnap) => {
     if (docSnap.exists()) {
       currentSettings = docSnap.data();
-      renderReports();
+      try {
+        renderReports();
+      } catch (err) {
+        console.error("reports.js: Error rendering reports on settings snapshot:", err);
+      }
     }
-  });
+  }, err => console.error("reports.js: Settings listener failed:", err));
 }
 
 function listenToReservations() {
   onSnapshot(collection(db, "reservations"), (snapshot) => {
     allReservations = [];
     snapshot.forEach(d => allReservations.push({ id: d.id, ...d.data() }));
-    renderReports();
-  });
+    try {
+      renderReports();
+    } catch (err) {
+      console.error("reports.js: Error rendering reports on reservations snapshot:", err);
+    }
+  }, err => console.error("reports.js: Reservations listener failed:", err));
 }
 
 function listenToExpenses() {
   onSnapshot(collection(db, "charges"), (snapshot) => {
     allExpenses = [];
     snapshot.forEach(d => allExpenses.push({ id: d.id, ...d.data() }));
-    renderReports();
+    try {
+      renderReports();
+    } catch (err) {
+      console.error("reports.js: Error rendering reports on expenses snapshot:", err);
+    }
+  }, err => console.error("reports.js: Expenses listener failed:", err));
+}
+
+function bindUIEvents() {
+  const yearSelect = document.getElementById('report-year');
+  yearSelect?.addEventListener('change', () => {
+    try {
+      renderReports();
+      showToast('Bilan actualisé', 'Affichage des données comptables de l\'exercice choisi.', 'info');
+    } catch (err) {
+      console.error("reports.js: Failed to render reports on year change:", err);
+    }
+  });
+
+  const exportBtn = document.getElementById('export-csv-btn');
+  if (exportBtn) {
+    exportBtn.onclick = () => {
+      try {
+        exportToCSV();
+      } catch (err) {
+        console.error("reports.js: Failed to export CSV:", err);
+      }
+    };
+  }
+
+  window.addEventListener('spSettingsUpdated', () => {
+    try {
+      renderReports();
+    } catch (err) {
+      console.error("reports.js: Failed to refresh on settings change:", err);
+    }
   });
 }
 
@@ -98,7 +159,7 @@ function renderReports() {
   for (let m = 0; m < 12; m++) {
     const monthPrefix = `${year}-${String(m + 1).padStart(2, '0')}`;
 
-    // 1. Revenues (actual paid parts of confirmed bookings)
+    // 1. Revenues (confirmed booking collections)
     revenues[m] = allReservations
       .filter(r => r.status === 'Confirmé' && r.eventDate && r.eventDate.startsWith(monthPrefix))
       .reduce((sum, r) => sum + ((r.totalAmount || 0) - (r.remainingAmount || 0)), 0);
@@ -183,7 +244,11 @@ function renderReports() {
   }
 
   // Load chart
-  renderProfitReportChart(monthsNames, netProfits, currency);
+  try {
+    renderProfitReportChart(monthsNames, netProfits, currency);
+  } catch (err) {
+    console.error("reports.js: Error rendering profit report chart:", err);
+  }
 }
 
 /**

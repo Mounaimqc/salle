@@ -9,36 +9,40 @@ import {
   addDoc, updateDoc, deleteDoc, doc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
+console.log('charges.js: Imports loaded successfully');
+
 let chargesChart = null;
 let allExpenses = [];
 let editingId = null;
 
-document.addEventListener('DOMContentLoaded', () => {
-  listenToExpenses();
-
-  // Modal event bindings
-  const modal = document.getElementById('expense-modal');
-  const addBtn = document.getElementById('open-add-expense-btn');
-  const closeBtn = document.getElementById('close-expense-modal');
-  const cancelBtn = document.getElementById('cancel-expense-btn');
-  const form = document.getElementById('expense-form');
-
-  if (addBtn) addBtn.onclick = () => openExpenseModal();
-  if (closeBtn) closeBtn.onclick = () => closeModal();
-  if (cancelBtn) cancelBtn.onclick = () => closeModal();
-
-  form?.addEventListener('submit', handleFormSubmit);
-
-  // Search & Filter event bindings
-  document.getElementById('search-expenses')?.addEventListener('input', renderExpensesTable);
-  document.getElementById('filter-expense-category')?.addEventListener('change', renderExpensesTable);
-  document.getElementById('filter-expense-month')?.addEventListener('change', renderExpensesTable);
-
-  // Watch theme changes to refresh chart colors
-  window.addEventListener('spSettingsUpdated', () => {
-    renderExpensesTable();
-  });
+window.addEventListener('authSessionLoaded', async () => {
+  console.log('charges.js: authSessionLoaded event received');
+  try {
+    await initChargesPage();
+  } catch (error) {
+    console.error('charges.js: Page initialization failed:', error);
+    const { showFatalError } = await import("./auth.js");
+    showFatalError(error);
+  }
 });
+
+async function initChargesPage() {
+  console.log('charges.js: Initializing charges ledger page');
+
+  try {
+    listenToExpenses();
+  } catch (err) {
+    console.error("charges.js: Failed to start expenses listener:", err);
+  }
+
+  try {
+    bindUIEvents();
+  } catch (err) {
+    console.error("charges.js: Failed to bind UI events:", err);
+  }
+
+  console.log('charges.js: Page initialization completed');
+}
 
 /**
  * Real-time Firestore listener for expenses
@@ -48,8 +52,48 @@ function listenToExpenses() {
   onSnapshot(q, (snapshot) => {
     allExpenses = [];
     snapshot.forEach(d => allExpenses.push({ id: d.id, ...d.data() }));
-    renderExpensesTable();
+    try {
+      renderExpensesTable();
+    } catch (err) {
+      console.error("charges.js: Error rendering expenses table:", err);
+    }
   }, err => showToast('Erreur', err.message, 'danger'));
+}
+
+/**
+ * Bind UI Events
+ */
+function bindUIEvents() {
+  const addBtn = document.getElementById('open-add-expense-btn');
+  if (addBtn) addBtn.onclick = () => openExpenseModal();
+
+  const closeBtn = document.getElementById('close-expense-modal');
+  if (closeBtn) closeBtn.onclick = () => closeModal();
+
+  const cancelBtn = document.getElementById('cancel-expense-btn');
+  if (cancelBtn) cancelBtn.onclick = () => closeModal();
+
+  const form = document.getElementById('expense-form');
+  if (form) form.addEventListener('submit', handleFormSubmit);
+
+  // Search & Filter event bindings
+  const searchInput = document.getElementById('search-expenses');
+  if (searchInput) searchInput.addEventListener('input', () => renderExpensesTable());
+
+  const catFilter = document.getElementById('filter-expense-category');
+  if (catFilter) catFilter.addEventListener('change', () => renderExpensesTable());
+
+  const monthFilter = document.getElementById('filter-expense-month');
+  if (monthFilter) monthFilter.addEventListener('change', () => renderExpensesTable());
+
+  // Watch theme changes to refresh chart colors
+  window.addEventListener('spSettingsUpdated', () => {
+    try {
+      renderExpensesTable();
+    } catch (err) {
+      console.error("charges.js: Failed to refresh on settings update:", err);
+    }
+  });
 }
 
 /**
@@ -61,39 +105,50 @@ function openExpenseModal(expenseId = null) {
   const title = document.getElementById('expense-modal-title');
   const form = document.getElementById('expense-form');
 
-  form?.reset();
+  if (form) form.reset();
 
   if (expenseId) {
     if (title) title.innerText = 'Modifier la Charge';
     const exp = allExpenses.find(e => e.id === expenseId);
     if (exp) {
-      document.getElementById('expense-id').value = exp.id;
-      document.getElementById('expense-date').value = exp.date || '';
-      document.getElementById('expense-category').value = exp.category || '';
-      document.getElementById('expense-amount').value = exp.amount || 0;
-      document.getElementById('expense-desc').value = exp.description || '';
+      const idEl = document.getElementById('expense-id');
+      const dateEl = document.getElementById('expense-date');
+      const categoryEl = document.getElementById('expense-category');
+      const amountEl = document.getElementById('expense-amount');
+      const descEl = document.getElementById('expense-desc');
+
+      if (idEl) idEl.value = exp.id;
+      if (dateEl) dateEl.value = exp.date || '';
+      if (categoryEl) categoryEl.value = exp.category || '';
+      if (amountEl) amountEl.value = exp.amount || 0;
+      if (descEl) descEl.value = exp.description || '';
     }
   } else {
     if (title) title.innerText = 'Enregistrer une Charge';
-    document.getElementById('expense-id').value = '';
+    const idEl = document.getElementById('expense-id');
+    if (idEl) idEl.value = '';
     
     const filterMonthVal = document.getElementById('filter-expense-month')?.value;
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
-    if (filterMonthVal && todayStr.startsWith(filterMonthVal)) {
-      document.getElementById('expense-date').value = todayStr;
-    } else if (filterMonthVal) {
-      document.getElementById('expense-date').value = `${filterMonthVal}-01`;
-    } else {
-      document.getElementById('expense-date').value = todayStr;
+    const dateEl = document.getElementById('expense-date');
+    if (dateEl) {
+      if (filterMonthVal && todayStr.startsWith(filterMonthVal)) {
+        dateEl.value = todayStr;
+      } else if (filterMonthVal) {
+        dateEl.value = `${filterMonthVal}-01`;
+      } else {
+        dateEl.value = todayStr;
+      }
     }
   }
 
-  modal?.classList.add('open');
+  if (modal) modal.classList.add('open');
 }
 
 function closeModal() {
-  document.getElementById('expense-modal')?.classList.remove('open');
+  const modal = document.getElementById('expense-modal');
+  if (modal) modal.classList.remove('open');
   editingId = null;
 }
 
@@ -103,10 +158,17 @@ function closeModal() {
 async function handleFormSubmit(e) {
   e.preventDefault();
 
-  const date = document.getElementById('expense-date').value;
-  const category = document.getElementById('expense-category').value;
-  const amount = parseFloat(document.getElementById('expense-amount').value) || 0;
-  const description = document.getElementById('expense-desc').value.trim();
+  const dateEl = document.getElementById('expense-date');
+  const categoryEl = document.getElementById('expense-category');
+  const amountEl = document.getElementById('expense-amount');
+  const descEl = document.getElementById('expense-desc');
+
+  if (!dateEl || !categoryEl || !amountEl || !descEl) return;
+
+  const date = dateEl.value;
+  const category = categoryEl.value;
+  const amount = parseFloat(amountEl.value) || 0;
+  const description = descEl.value.trim();
 
   const payload = { date, category, amount, description };
 
@@ -129,13 +191,12 @@ async function handleFormSubmit(e) {
  * Delete Expense Record
  */
 async function deleteExpense(id) {
-  if (confirm('Voulez-vous vraiment supprimer cet enregistrement de charge ?')) {
-    try {
-      await deleteDoc(doc(db, "charges", id));
-      showToast('Charge supprimée', 'L\'enregistrement de dépense a été retiré.', 'success');
-    } catch (err) {
-      showToast('Erreur', err.message, 'danger');
-    }
+  if (!confirm('Voulez-vous vraiment supprimer cet enregistrement de charge ?')) return;
+  try {
+    await deleteDoc(doc(db, "charges", id));
+    showToast('Charge supprimée', 'L\'enregistrement de dépense a été retiré.', 'success');
+  } catch (err) {
+    showToast('Erreur', err.message, 'danger');
   }
 }
 
@@ -147,9 +208,13 @@ function renderExpensesTable() {
   const emptyState = document.getElementById('expenses-empty-state');
   if (!tbody) return;
 
-  const searchQuery = (document.getElementById('search-expenses')?.value || '').toLowerCase().trim();
-  const selectedCat = document.getElementById('filter-expense-category')?.value || '';
-  const selectedMonth = document.getElementById('filter-expense-month')?.value || '';
+  const searchInput = document.getElementById('search-expenses');
+  const catFilterEl = document.getElementById('filter-expense-category');
+  const monthFilterEl = document.getElementById('filter-expense-month');
+
+  const searchQuery = (searchInput?.value || '').toLowerCase().trim();
+  const selectedCat = catFilterEl?.value || '';
+  const selectedMonth = monthFilterEl?.value || '';
   const currency = currentCurrencySymbol || '€';
 
   // Apply filters
@@ -168,7 +233,11 @@ function renderExpensesTable() {
 
   if (filtered.length === 0) {
     if (emptyState) emptyState.style.display = 'flex';
-    updateExpensesAnalytics([], currency);
+    try {
+      updateExpensesAnalytics([], currency);
+    } catch (err) {
+      console.error("charges.js: Error updating empty analytics:", err);
+    }
     return;
   }
 
@@ -182,7 +251,7 @@ function renderExpensesTable() {
     tr.innerHTML = `
       <td style="font-weight: 500;">${formattedDate}</td>
       <td>
-        <span class="badge badge-info" style="font-weight:600;"><i class="fa-solid fa-tag"></i> ${exp.category}</span>
+        <span class="badge badge-info" style="font-weight:600;"><i class="fa-solid fa-tag"></i> ${exp.category || 'Général'}</span>
       </td>
       <td style="font-weight: 700; color: var(--danger);">${(exp.amount || 0).toLocaleString()} ${currency}</td>
       <td style="color: var(--text-muted); max-width: 250px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" title="${exp.description || ''}">${exp.description || '—'}</td>
@@ -200,13 +269,13 @@ function renderExpensesTable() {
 
     // Bind action listeners dynamically to avoid global scope ReferenceErrors
     tr.querySelectorAll('button[data-action]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.onclick = (e) => {
         e.stopPropagation();
         const action = btn.dataset.action;
         const id = btn.dataset.id;
         if (action === 'edit') openExpenseModal(id);
         else if (action === 'delete') deleteExpense(id);
-      });
+      };
     });
 
     tbody.appendChild(tr);
@@ -214,7 +283,11 @@ function renderExpensesTable() {
 
   // Update Summary panel
   const allMonthExpenses = allExpenses.filter(exp => !selectedMonth || (exp.date && exp.date.startsWith(selectedMonth)));
-  updateExpensesAnalytics(allMonthExpenses, currency);
+  try {
+    updateExpensesAnalytics(allMonthExpenses, currency);
+  } catch (err) {
+    console.error("charges.js: Error updating expenses analytics:", err);
+  }
 }
 
 /**
