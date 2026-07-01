@@ -2,7 +2,7 @@
  * SallePro - Reports Page Logic (Firebase Firestore Module)
  */
 
-import { db } from "./firebase.js";
+import { db, auth } from "./firebase.js";
 import { showToast, currentCurrencySymbol } from "./app.js";
 import {
   collection, onSnapshot, doc
@@ -57,7 +57,9 @@ async function initReportsPage() {
 }
 
 function listenToSettings() {
-  onSnapshot(doc(db, "settings", "hall_settings"), (docSnap) => {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  onSnapshot(doc(db, "users", userId, "settings", "hall_settings"), (docSnap) => {
     if (docSnap.exists()) {
       currentSettings = docSnap.data();
       try {
@@ -70,7 +72,9 @@ function listenToSettings() {
 }
 
 function listenToReservations() {
-  onSnapshot(collection(db, "reservations"), (snapshot) => {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  onSnapshot(collection(db, "users", userId, "reservations"), (snapshot) => {
     allReservations = [];
     snapshot.forEach(d => allReservations.push({ id: d.id, ...d.data() }));
     try {
@@ -82,7 +86,9 @@ function listenToReservations() {
 }
 
 function listenToExpenses() {
-  onSnapshot(collection(db, "charges"), (snapshot) => {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  onSnapshot(collection(db, "users", userId, "expenses"), (snapshot) => {
     allExpenses = [];
     snapshot.forEach(d => allExpenses.push({ id: d.id, ...d.data() }));
     try {
@@ -161,7 +167,7 @@ function renderReports() {
 
     // 1. Revenues (confirmed booking collections)
     revenues[m] = allReservations
-      .filter(r => r.status === 'Confirmé' && r.eventDate && r.eventDate.startsWith(monthPrefix))
+      .filter(r => r.status === 'Confirmé' && r.startDate && r.startDate.startsWith(monthPrefix))
       .reduce((sum, r) => sum + ((r.totalAmount || 0) - (r.remainingAmount || 0)), 0);
 
     // 2. Expenses (separate General Charges from Salaries)

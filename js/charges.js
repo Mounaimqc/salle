@@ -2,7 +2,7 @@
  * SallePro - Charges Page Logic (Firebase Firestore Module)
  */
 
-import { db } from "./firebase.js";
+import { db, auth } from "./firebase.js";
 import { showToast, currentCurrencySymbol } from "./app.js";
 import {
   collection, query, orderBy, onSnapshot,
@@ -48,7 +48,9 @@ async function initChargesPage() {
  * Real-time Firestore listener for expenses
  */
 function listenToExpenses() {
-  const q = query(collection(db, "charges"), orderBy("date", "desc"));
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  const q = query(collection(db, "users", userId, "expenses"), orderBy("date", "desc"));
   onSnapshot(q, (snapshot) => {
     allExpenses = [];
     snapshot.forEach(d => allExpenses.push({ id: d.id, ...d.data() }));
@@ -172,13 +174,16 @@ async function handleFormSubmit(e) {
 
   const payload = { date, category, amount, description };
 
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+
   try {
     if (editingId) {
-      await updateDoc(doc(db, "charges", editingId), payload);
+      await updateDoc(doc(db, "users", userId, "expenses", editingId), payload);
       showToast('Charge modifiée', 'Les détails de la dépense ont été modifiés.', 'success');
     } else {
       payload.createdAt = serverTimestamp();
-      await addDoc(collection(db, "charges"), payload);
+      await addDoc(collection(db, "users", userId, "expenses"), payload);
       showToast('Charge enregistrée', 'La nouvelle dépense a été ajoutée aux registres.', 'success');
     }
     closeModal();
@@ -192,8 +197,10 @@ async function handleFormSubmit(e) {
  */
 async function deleteExpense(id) {
   if (!confirm('Voulez-vous vraiment supprimer cet enregistrement de charge ?')) return;
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
   try {
-    await deleteDoc(doc(db, "charges", id));
+    await deleteDoc(doc(db, "users", userId, "expenses", id));
     showToast('Charge supprimée', 'L\'enregistrement de dépense a été retiré.', 'success');
   } catch (err) {
     showToast('Erreur', err.message, 'danger');

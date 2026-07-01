@@ -2,7 +2,7 @@
  * SallePro - Employees Page (Firebase Firestore Module)
  */
 
-import { db } from "./firebase.js";
+import { db, auth } from "./firebase.js";
 import { showToast, currentCurrencySymbol } from "./app.js";
 import {
   collection, query, orderBy, onSnapshot,
@@ -50,7 +50,9 @@ async function initEmployeesPage() {
 
 // ─── Real-time Listener ────────────────────────────────────────────────────
 function listenToEmployees() {
-  const q = query(collection(db, "employees"), orderBy("createdAt", "desc"));
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  const q = query(collection(db, "users", userId, "employees"), orderBy("createdAt", "desc"));
   onSnapshot(q, (snapshot) => {
     allEmployees = [];
     snapshot.forEach(d => allEmployees.push({ id: d.id, ...d.data() }));
@@ -247,8 +249,11 @@ async function toggleAttendance(empId, dateStr, status) {
     attendance[dateStr] = status;
   }
 
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+
   try {
-    await updateDoc(doc(db, "employees", empId), { attendance });
+    await updateDoc(doc(db, "users", userId, "employees", empId), { attendance });
     // Optimistically update local copy
     emp.attendance = attendance;
     renderAttendanceTable();
@@ -375,14 +380,17 @@ async function handleFormSubmit(e) {
 
   const payload = { name, position, phone, salary, hireDate, status };
 
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+
   try {
     if (editingId) {
-      await updateDoc(doc(db, "employees", editingId), payload);
+      await updateDoc(doc(db, "users", userId, "employees", editingId), payload);
       showToast('Modifié', `${name} mis à jour.`, 'success');
     } else {
       payload.createdAt = serverTimestamp();
       payload.attendance = {};
-      await addDoc(collection(db, "employees"), payload);
+      await addDoc(collection(db, "users", userId, "employees"), payload);
       showToast('Employé créé', `${name} ajouté au personnel.`, 'success');
     }
     closeModal();
@@ -393,9 +401,11 @@ async function handleFormSubmit(e) {
 
 async function deleteEmployee(id) {
   if (!confirm('Supprimer cet employé définitivement ?')) return;
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
   try {
     const emp = allEmployees.find(e => e.id === id);
-    await deleteDoc(doc(db, "employees", id));
+    await deleteDoc(doc(db, "users", userId, "employees", id));
     showToast('Supprimé', `${emp?.name || 'Employé'} supprimé.`, 'success');
   } catch (err) {
     showToast('Erreur', err.message, 'danger');

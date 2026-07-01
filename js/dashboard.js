@@ -2,7 +2,7 @@
  * SallePro - Dashboard Page Logic (Firebase Firestore Module)
  */
 
-import { db } from "./firebase.js";
+import { db, auth } from "./firebase.js";
 import { showToast, currentCurrencySymbol } from "./app.js";
 import {
   collection,
@@ -10,6 +10,15 @@ import {
   orderBy,
   onSnapshot
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+// Helper to format date as DD/MM/YYYY
+function formatDateFR(dateStr) {
+  if (!dateStr) return '—';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const [year, month, day] = parts;
+  return `${day}/${month}/${year}`;
+}
 
 console.log('dashboard.js: Imports loaded successfully');
 
@@ -84,7 +93,9 @@ async function initDashboard() {
 
 // --- Real-time Reservations listener ---
 function listenToReservations() {
-  const q = query(collection(db, "reservations"), orderBy("createdAt", "desc"));
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  const q = query(collection(db, "users", userId, "reservations"), orderBy("createdAt", "desc"));
 
   onSnapshot(q, (snapshot) => {
     allReservations = [];
@@ -122,7 +133,9 @@ function listenToReservations() {
 
 // --- Real-time Clients listener ---
 function listenToClients() {
-  onSnapshot(collection(db, "clients"), (snapshot) => {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  onSnapshot(collection(db, "users", userId, "clients"), (snapshot) => {
     const el = document.getElementById('kpi-clients');
     if (el) el.innerText = snapshot.size;
   }, (err) => {
@@ -132,7 +145,9 @@ function listenToClients() {
 
 // --- Real-time Stock listener for low-stock KPI ---
 function listenToStock() {
-  onSnapshot(collection(db, "stock"), (snapshot) => {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  onSnapshot(collection(db, "users", userId, "stock"), (snapshot) => {
     let lowCount = 0;
     snapshot.forEach(doc => {
       const item = doc.data();
@@ -163,7 +178,9 @@ function listenToStock() {
 
 // --- Real-time Expenses listener ---
 function listenToExpenses() {
-  onSnapshot(collection(db, "charges"), (snapshot) => {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  onSnapshot(collection(db, "users", userId, "expenses"), (snapshot) => {
     const now = new Date();
     const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -207,7 +224,7 @@ function updateReservationKPIs() {
 
   // KPI: monthly revenue
   const monthRev = allReservations
-    .filter(r => r.status === 'Confirmé' && r.eventDate && r.eventDate.startsWith(monthPrefix))
+    .filter(r => r.status === 'Confirmé' && r.startDate && r.startDate.startsWith(monthPrefix))
     .reduce((sum, r) => sum + ((r.totalAmount || 0) - (r.remainingAmount || 0)), 0);
 
   const kpiRev = document.getElementById('kpi-revenue');
@@ -215,8 +232,8 @@ function updateReservationKPIs() {
 
   // KPI: next upcoming confirmed event
   const future = allReservations
-    .filter(r => r.status === 'Confirmé' && r.eventDate && r.eventDate >= todayStr)
-    .sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || ''));
+    .filter(r => r.status === 'Confirmé' && r.endDate && r.endDate >= todayStr)
+    .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
 
   const kpiNext = document.getElementById('kpi-next-event');
   const kpiNextDate = document.getElementById('kpi-next-event-date');
@@ -224,9 +241,8 @@ function updateReservationKPIs() {
   if (future.length > 0) {
     const next = future[0];
     if (kpiNext) kpiNext.innerText = `${next.eventType || 'Événement'} — ${next.clientName || 'Client'}`;
-    if (kpiNextDate && next.eventDate) {
-      const d = new Date(next.eventDate);
-      kpiNextDate.innerHTML = `<i class="fa-solid fa-calendar"></i> ${d.toLocaleDateString('fr-FR', { day:'numeric', month:'short' })}`;
+    if (kpiNextDate && next.startDate && next.endDate) {
+      kpiNextDate.innerHTML = `<i class="fa-solid fa-calendar"></i> Du ${formatDateFR(next.startDate)} au ${formatDateFR(next.endDate)}`;
     }
   } else {
     if (kpiNext) kpiNext.innerText = 'Aucun';
@@ -253,12 +269,12 @@ function updateRecentBookingsTable() {
     if (res.status === 'Confirmé') badge = 'badge-success';
     if (res.status === 'Annulé') badge = 'badge-danger';
 
-    const d = res.eventDate ? new Date(res.eventDate).toLocaleDateString('fr-FR') : '—';
+    const d = res.startDate && res.endDate ? `Du ${formatDateFR(res.startDate)} au ${formatDateFR(res.endDate)}` : '—';
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="font-weight:600;">${res.clientName || '—'}</td>
-      <td>${d}</td>
+      <td style="font-size: 0.85rem;">${d}</td>
       <td style="color:var(--success);font-weight:600;">${(res.deposit || 0).toLocaleString()} ${sym}</td>
       <td style="color:var(--danger);font-weight:700;">${(res.remainingAmount || 0).toLocaleString()} ${sym}</td>
       <td><span class="badge ${badge}">${res.status || 'En attente'}</span></td>
@@ -314,7 +330,13 @@ function renderCalendarWidget() {
       cell.classList.add('today');
     }
 
-    const booking = monthBookings.find(r => r.eventDate === dateStr);
+    const booking = allReservations.find(r =>
+      r.status !== 'Annulé' &&
+      r.startDate && r.endDate &&
+      r.startDate <= dateStr &&
+      r.endDate >= dateStr
+    );
+
     if (booking) {
       const dot = document.createElement('div');
       dot.className = 'day-event-dot ' + (booking.status === 'Confirmé' ? 'reserved' : 'pending');
@@ -356,7 +378,7 @@ function showDayDetails(dateStr, booking) {
       <div class="no-event-placeholder">
         <i class="fa-solid fa-calendar-check" style="color:var(--success);"></i>
         <span style="color:var(--success);font-weight:600;">Salle Disponible</span>
-        <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="window.location.href='reservations.html'">Réserver</button>
+        <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="window.location.href='reservations.html?newDate=${dateStr}'">Réserver</button>
       </div>`;
     return;
   }
@@ -373,6 +395,8 @@ function showDayDetails(dateStr, booking) {
       </div>
       <div class="event-details-row"><span>Client:</span><span>${booking.clientName || '—'}</span></div>
       <div class="event-details-row"><span>Téléphone:</span><span>${booking.phone || '—'}</span></div>
+      <div class="event-details-row"><span>Période:</span><span>Du ${formatDateFR(booking.startDate)} au ${formatDateFR(booking.endDate)}</span></div>
+      <div class="event-details-row"><span>Horaires:</span><span>${booking.entryTime || '—'} à ${booking.exitTime || '—'} (${booking.duration || '—'})</span></div>
       <div class="event-details-row"><span>Invités:</span><span>${booking.guests || 0} pers.</span></div>
       <div class="event-details-row"><span>Total:</span><span>${(booking.totalAmount || 0).toLocaleString()} ${sym}</span></div>
       <div class="event-details-row"><span>Reste dû:</span>
@@ -399,8 +423,8 @@ function updateCashflowChart() {
   const revenues = Array(12).fill(0);
 
   allReservations.forEach(r => {
-    if (r.status === 'Confirmé' && r.eventDate) {
-      const d = new Date(r.eventDate);
+    if (r.status === 'Confirmé' && r.startDate) {
+      const d = new Date(r.startDate);
       if (d.getFullYear() === year) {
         revenues[d.getMonth()] += (r.totalAmount || 0) - (r.remainingAmount || 0);
       }

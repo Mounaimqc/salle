@@ -2,7 +2,7 @@
  * SallePro - Reservations Page (Firebase Firestore Module)
  */
 
-import { db } from "./firebase.js";
+import { db, auth } from "./firebase.js";
 import { showToast, currentCurrencySymbol } from "./app.js";
 import {
   collection, query, orderBy, onSnapshot,
@@ -11,6 +11,44 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
 console.log('reservations.js: Imports loaded successfully');
+
+// Helper to format date as DD/MM/YYYY
+function formatDateFR(dateStr) {
+  if (!dateStr) return '—';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const [year, month, day] = parts;
+  return `${day}/${month}/${year}`;
+}
+
+// Calculate the duration of the reservation
+function calculateDuration(startDate, endDate, entryTime, exitTime) {
+  if (!startDate || !endDate) return "";
+  
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return "";
+  
+  const diffTime = end - start;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // inclusive number of days
+  
+  if (diffDays < 1) return "";
+
+  // Calculate hours if start and end dates are the same
+  if (startDate === endDate && entryTime && exitTime) {
+    const [hEntry, mEntry] = entryTime.split(':').map(Number);
+    const [hExit, mExit] = exitTime.split(':').map(Number);
+    const totalMinutes = (hExit * 60 + mExit) - (hEntry * 60 + mEntry);
+    if (totalMinutes > 0) {
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      return `${hours}h${minutes > 0 ? ' ' + minutes + 'm' : ''} (1 jour)`;
+    }
+  }
+  
+  return `${diffDays} jour${diffDays > 1 ? 's' : ''}`;
+}
 
 let allReservations = [];
 let allClients = [];
@@ -67,7 +105,9 @@ async function initReservationsPage() {
 
 // ─── Real-time Firestore Listener ──────────────────────────────────────────
 function listenToReservations() {
-  const q = query(collection(db, "reservations"), orderBy("createdAt", "desc"));
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  const q = query(collection(db, "users", userId, "reservations"), orderBy("createdAt", "desc"));
   onSnapshot(q, (snapshot) => {
     allReservations = [];
     snapshot.forEach(d => allReservations.push({ id: d.id, ...d.data() }));
@@ -80,7 +120,9 @@ function listenToReservations() {
 }
 
 function listenToClients() {
-  onSnapshot(collection(db, "clients"), (snapshot) => {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  onSnapshot(collection(db, "users", userId, "clients"), (snapshot) => {
     allClients = [];
     snapshot.forEach(d => allClients.push({ id: d.id, ...d.data() }));
     try {
@@ -153,6 +195,29 @@ function bindUIEvents() {
   total?.addEventListener('input', updateRemaining);
   deposit?.addEventListener('input', updateRemaining);
 
+  // Duration calculation live updates
+  const startDateEl = document.getElementById('booking-start-date');
+  const endDateEl = document.getElementById('booking-end-date');
+  const entryTimeEl = document.getElementById('booking-entry-time');
+  const exitTimeEl = document.getElementById('booking-exit-time');
+  const durationLabel = document.getElementById('booking-duration-label');
+
+  const updateDurationUI = () => {
+    if (startDateEl && endDateEl && entryTimeEl && exitTimeEl && durationLabel) {
+      const duration = calculateDuration(startDateEl.value, endDateEl.value, entryTimeEl.value, exitTimeEl.value);
+      durationLabel.innerText = duration ? `Durée : ${duration}` : 'Durée : --';
+    }
+  };
+
+  startDateEl?.addEventListener('input', updateDurationUI);
+  startDateEl?.addEventListener('change', updateDurationUI);
+  endDateEl?.addEventListener('input', updateDurationUI);
+  endDateEl?.addEventListener('change', updateDurationUI);
+  entryTimeEl?.addEventListener('input', updateDurationUI);
+  entryTimeEl?.addEventListener('change', updateDurationUI);
+  exitTimeEl?.addEventListener('input', updateDurationUI);
+  exitTimeEl?.addEventListener('change', updateDurationUI);
+
   // Filters
   ['search-bookings','filter-type','filter-status','filter-date-start','filter-date-end'].forEach(id => {
     const el = document.getElementById(id);
@@ -191,8 +256,17 @@ function checkQueryParams() {
   const newDate = params.get('newDate');
   if (newDate) {
     openModal();
-    const dateEl = document.getElementById('booking-event-date');
-    if (dateEl) dateEl.value = newDate;
+    const startDateEl = document.getElementById('booking-start-date');
+    const endDateEl = document.getElementById('booking-end-date');
+    const entryTimeEl = document.getElementById('booking-entry-time');
+    const exitTimeEl = document.getElementById('booking-exit-time');
+    if (startDateEl) startDateEl.value = newDate;
+    if (endDateEl) endDateEl.value = newDate;
+    if (entryTimeEl) entryTimeEl.value = '08:00';
+    if (exitTimeEl) exitTimeEl.value = '22:00';
+    
+    const durationLabel = document.getElementById('booking-duration-label');
+    if (durationLabel) durationLabel.innerText = 'Durée : 1 jour';
   }
   const search = params.get('search');
   if (search) {
@@ -222,8 +296,8 @@ function renderTable() {
                         (r.notes || '').toLowerCase().includes(search);
     const matchType = !typeFilter || typeFilter === 'all' || r.eventType === typeFilter;
     const matchStatus = !statusFilter || statusFilter === 'all' || r.status === statusFilter;
-    const matchDate = (!dateStart || r.eventDate >= dateStart) &&
-                      (!dateEnd || r.eventDate <= dateEnd);
+    const matchDate = (!dateStart || r.startDate >= dateStart) &&
+                      (!dateEnd || r.endDate <= dateEnd);
     return matchSearch && matchType && matchStatus && matchDate;
   });
 
@@ -239,8 +313,8 @@ function renderTable() {
     let badge = res.status === 'Confirmé' ? 'badge-success'
               : res.status === 'Annulé' ? 'badge-danger' : 'badge-warning';
 
-    const eventDate = res.eventDate
-      ? new Date(res.eventDate).toLocaleDateString('fr-FR')
+    const eventDate = res.startDate && res.endDate
+      ? `Du ${formatDateFR(res.startDate)} au ${formatDateFR(res.endDate)}<br><small style="color:var(--text-light);font-size:0.75rem;"><i class="fa-regular fa-clock"></i> ${res.entryTime || '—'} à ${res.exitTime || '—'}</small>`
       : '—';
 
     const tr = document.createElement('tr');
@@ -302,7 +376,10 @@ function openModal(reservationId = null) {
       const nameEl = document.getElementById('booking-client-name');
       const phoneEl = document.getElementById('booking-client-phone');
       const typeEl = document.getElementById('booking-event-type');
-      const dateEl = document.getElementById('booking-event-date');
+      const startDateEl = document.getElementById('booking-start-date');
+      const endDateEl = document.getElementById('booking-end-date');
+      const entryTimeEl = document.getElementById('booking-entry-time');
+      const exitTimeEl = document.getElementById('booking-exit-time');
       const guestsEl = document.getElementById('booking-guests');
       const statusEl = document.getElementById('booking-status');
       const totalEl = document.getElementById('booking-total');
@@ -313,13 +390,21 @@ function openModal(reservationId = null) {
       if (nameEl) nameEl.value = res.clientName || '';
       if (phoneEl) phoneEl.value = res.phone || '';
       if (typeEl) typeEl.value = res.eventType || '';
-      if (dateEl) dateEl.value = res.eventDate || '';
+      if (startDateEl) startDateEl.value = res.startDate || '';
+      if (endDateEl) endDateEl.value = res.endDate || '';
+      if (entryTimeEl) entryTimeEl.value = res.entryTime || '';
+      if (exitTimeEl) exitTimeEl.value = res.exitTime || '';
       if (guestsEl) guestsEl.value = res.guests || '';
       if (statusEl) statusEl.value = res.status || 'En attente';
       if (totalEl) totalEl.value = res.totalAmount || '';
       if (depositEl) depositEl.value = res.deposit || '';
       if (remainingEl) remainingEl.value = res.remainingAmount || '';
       if (notesEl) notesEl.value = res.notes || '';
+
+      const durationLabel = document.getElementById('booking-duration-label');
+      if (durationLabel) {
+        durationLabel.innerText = res.duration ? `Durée : ${res.duration}` : 'Durée : --';
+      }
     }
   } else {
     if (title) title.innerText = 'Nouvelle Réservation';
@@ -327,6 +412,18 @@ function openModal(reservationId = null) {
     const statusEl = document.getElementById('booking-status');
     if (idEl) idEl.value = '';
     if (statusEl) statusEl.value = 'En attente';
+
+    const startDateEl = document.getElementById('booking-start-date');
+    const endDateEl = document.getElementById('booking-end-date');
+    const entryTimeEl = document.getElementById('booking-entry-time');
+    const exitTimeEl = document.getElementById('booking-exit-time');
+    const durationLabel = document.getElementById('booking-duration-label');
+
+    if (startDateEl) startDateEl.value = '';
+    if (endDateEl) endDateEl.value = '';
+    if (entryTimeEl) entryTimeEl.value = '';
+    if (exitTimeEl) exitTimeEl.value = '';
+    if (durationLabel) durationLabel.innerText = 'Durée : --';
   }
 
   if (modal) modal.classList.add('open');
@@ -345,19 +442,25 @@ async function handleFormSubmit(e) {
   const nameEl = document.getElementById('booking-client-name');
   const phoneEl = document.getElementById('booking-client-phone');
   const typeEl = document.getElementById('booking-event-type');
-  const dateEl = document.getElementById('booking-event-date');
+  const startDateEl = document.getElementById('booking-start-date');
+  const endDateEl = document.getElementById('booking-end-date');
+  const entryTimeEl = document.getElementById('booking-entry-time');
+  const exitTimeEl = document.getElementById('booking-exit-time');
   const guestsEl = document.getElementById('booking-guests');
   const statusEl = document.getElementById('booking-status');
   const totalEl = document.getElementById('booking-total');
   const depositEl = document.getElementById('booking-deposit');
   const notesEl = document.getElementById('booking-notes');
 
-  if (!nameEl || !typeEl || !dateEl || !totalEl || !statusEl) return;
+  if (!nameEl || !typeEl || !startDateEl || !endDateEl || !entryTimeEl || !exitTimeEl || !totalEl || !statusEl) return;
 
   const clientName = nameEl.value.trim();
   const phone = phoneEl ? phoneEl.value.trim() : '';
   const eventType = typeEl.value;
-  const eventDate = dateEl.value;
+  const startDate = startDateEl.value;
+  const endDate = endDateEl.value;
+  const entryTime = entryTimeEl.value;
+  const exitTime = exitTimeEl.value;
   const guests = parseInt(guestsEl ? guestsEl.value : 0) || 0;
   const status = statusEl.value;
   const totalAmount = parseFloat(totalEl.value) || 0;
@@ -370,32 +473,47 @@ async function handleFormSubmit(e) {
     return;
   }
 
+  if (endDate < startDate) {
+    showToast('Validation', 'La date de fin doit être supérieure ou égale à la date de début.', 'warning');
+    return;
+  }
+
+  if (exitTime <= entryTime) {
+    showToast('Validation', "L'heure de sortie doit être supérieure à l'heure d'entrée.", 'warning');
+    return;
+  }
+
   // Double-booking check (only for non-cancelled bookings)
   if (status !== 'Annulé') {
     const conflict = allReservations.find(r =>
-      r.eventDate === eventDate &&
       r.id !== editingId &&
-      r.status !== 'Annulé'
+      r.status !== 'Annulé' &&
+      startDate <= r.endDate &&
+      endDate >= r.startDate
     );
     if (conflict) {
-      if (!confirm(`⚠️ La date du ${new Date(eventDate).toLocaleDateString('fr-FR')} est déjà réservée pour ${conflict.clientName}. Continuer quand même ?`)) {
-        return;
-      }
+      showToast('Conflit de réservation', `⚠️ Cette période chevauche une réservation existante pour ${conflict.clientName} (du ${formatDateFR(conflict.startDate)} au ${formatDateFR(conflict.endDate)}).`, 'danger');
+      return;
     }
   }
 
+  const duration = calculateDuration(startDate, endDate, entryTime, exitTime);
+
   const payload = {
-    clientName, phone, eventType, eventDate, guests,
+    clientName, phone, eventType, startDate, endDate, entryTime, exitTime, duration, guests,
     status, totalAmount, deposit, remainingAmount, notes
   };
 
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+
   try {
     if (editingId) {
-      await updateDoc(doc(db, "reservations", editingId), payload);
+      await updateDoc(doc(db, "users", userId, "reservations", editingId), payload);
       showToast('Réservation modifiée', 'Modifications enregistrées.', 'success');
     } else {
       payload.createdAt = serverTimestamp();
-      await addDoc(collection(db, "reservations"), payload);
+      await addDoc(collection(db, "users", userId, "reservations"), payload);
       showToast('Réservation créée', `${clientName} ajouté avec succès.`, 'success');
     }
     closeModal();
@@ -407,8 +525,10 @@ async function handleFormSubmit(e) {
 // ─── Delete ────────────────────────────────────────────────────────────────
 async function deleteReservation(id) {
   if (!confirm('Voulez-vous vraiment supprimer cette réservation ? Action irréversible.')) return;
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
   try {
-    await deleteDoc(doc(db, "reservations", id));
+    await deleteDoc(doc(db, "users", userId, "reservations", id));
     showToast('Supprimé', 'La réservation a été supprimée.', 'success');
   } catch (err) {
     showToast('Erreur', err.message, 'danger');
@@ -441,9 +561,11 @@ function showReceipt(id) {
   if (clientNameEl) clientNameEl.innerText = res.clientName || '—';
   if (clientPhoneEl) clientPhoneEl.innerText = res.phone || '—';
   if (eventTypeEl) eventTypeEl.innerText = res.eventType || '—';
-  if (eventDateEl) eventDateEl.innerText = res.eventDate
-    ? new Date(res.eventDate).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long', year:'numeric' })
-    : '—';
+  if (eventDateEl) {
+    eventDateEl.innerHTML = res.startDate && res.endDate
+      ? `Du ${formatDateFR(res.startDate)} au ${formatDateFR(res.endDate)}<br><small style="color:var(--text-muted);font-size:0.85rem;">Horaire : ${res.entryTime || '—'} à ${res.exitTime || '—'}</small>`
+      : '—';
+  }
   if (guestsEl) guestsEl.innerText = `${res.guests || 0} convives`;
   if (totalValEl) totalValEl.innerText = `${(res.totalAmount||0).toLocaleString()} ${sym}`;
   if (depositValEl) depositValEl.innerText = `${(res.deposit||0).toLocaleString()} ${sym}`;
@@ -481,7 +603,9 @@ Client    : ${res.clientName}
 Tél.      : ${res.phone || '—'}
 --------------------------------------------------
 Événement : ${res.eventType}
-Date      : ${res.eventDate ? new Date(res.eventDate).toLocaleDateString('fr-FR') : '—'}
+Période   : Du ${formatDateFR(res.startDate)} au ${formatDateFR(res.endDate)}
+Horaire   : de ${res.entryTime || '—'} à ${res.exitTime || '—'}
+Durée     : ${res.duration || '—'}
 Invités   : ${res.guests}
 Statut    : ${res.status}
 Notes     : ${res.notes || 'Aucune'}

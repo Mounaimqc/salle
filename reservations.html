@@ -192,9 +192,30 @@
                 <option value="Autre">Autre</option>
               </select>
             </div>
+            <div class="form-group" style="display: flex; align-items: flex-end;">
+              <span id="booking-duration-label" style="font-weight: 700; color: var(--color-secondary); padding: 8px 14px; background: var(--color-secondary-light); border-radius: var(--radius-sm); font-size: 0.85rem; margin-bottom: 6px; display: inline-flex; align-items: center; gap: 6px;"><i class="fa-solid fa-hourglass-half"></i> Durée : --</span>
+            </div>
+          </div>
+
+          <div class="form-grid form-grid-2">
             <div class="form-group">
-              <label class="form-label required" for="booking-event-date">Date de l'événement</label>
-              <input type="date" class="form-control" id="booking-event-date" required />
+              <label class="form-label required" for="booking-start-date">Date de début</label>
+              <input type="date" class="form-control" id="booking-start-date" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label required" for="booking-end-date">Date de fin</label>
+              <input type="date" class="form-control" id="booking-end-date" required />
+            </div>
+          </div>
+
+          <div class="form-grid form-grid-2">
+            <div class="form-group">
+              <label class="form-label required" for="booking-entry-time">Heure d'entrée</label>
+              <input type="time" class="form-control" id="booking-entry-time" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label required" for="booking-exit-time">Heure de sortie</label>
+              <input type="time" class="form-control" id="booking-exit-time" required />
             </div>
           </div>
 

@@ -2,7 +2,7 @@
  * SallePro - Stock Inventory Page (Firebase Firestore Module)
  */
 
-import { db, storage } from "./firebase.js";
+import { db, auth, storage } from "./firebase.js";
 import { showToast, currentCurrencySymbol } from "./app.js";
 import {
   collection, query, orderBy, onSnapshot,
@@ -50,7 +50,9 @@ async function initStockPage() {
 
 // ─── Real-time Listener ────────────────────────────────────────────────────
 function listenToStock() {
-  const q = query(collection(db, "stock"), orderBy("createdAt", "desc"));
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  const q = query(collection(db, "users", userId, "stock"), orderBy("createdAt", "desc"));
   onSnapshot(q, (snapshot) => {
     allStock = [];
     snapshot.forEach(d => allStock.push({ id: d.id, ...d.data() }));
@@ -252,16 +254,19 @@ async function handleFormSubmit(e) {
       imageUrl = await getDownloadURL(uploadResult.ref);
     }
 
+    const userId = auth.currentUser?.uid;
+    if (!userId) return;
+
     const payload = { itemName, category, quantity, minimumQuantity, unitPrice };
     if (imageUrl) payload.image = imageUrl;
 
     if (editingId) {
-      await updateDoc(doc(db, "stock", editingId), payload);
+      await updateDoc(doc(db, "users", userId, "stock", editingId), payload);
       showToast('Stock mis à jour', `${itemName} modifié.`, 'success');
     } else {
       payload.createdAt = serverTimestamp();
       payload.image = imageUrl;
-      await addDoc(collection(db, "stock"), payload);
+      await addDoc(collection(db, "users", userId, "stock"), payload);
       showToast('Article ajouté', `${itemName} enregistré dans l'inventaire.`, 'success');
     }
 
@@ -283,9 +288,11 @@ async function handleFormSubmit(e) {
 // ─── Delete ────────────────────────────────────────────────────────────────
 async function deleteItem(id) {
   if (!confirm("Supprimer cet article de l'inventaire ?")) return;
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
   try {
     const item = allStock.find(i => i.id === id);
-    await deleteDoc(doc(db, "stock", id));
+    await deleteDoc(doc(db, "users", userId, "stock", id));
     showToast('Supprimé', `${item?.itemName || 'Article'} retiré.`, 'success');
   } catch (err) {
     showToast('Erreur', err.message, 'danger');

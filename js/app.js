@@ -23,60 +23,48 @@ export let currentCurrencyCode = "EUR";
 // Inject common layout elements
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    await initializeAppShell();
-  } catch (error) {
-    console.error('app.js: Page initialization failed:', error);
-    // Fail gracefully: dismiss loader so page is visible
-    const { removeLoaderOverlay } = await import("./auth.js");
-    removeLoaderOverlay();
-  }
-});
-
-// Watch for authentication session loads to update header profile details
-window.addEventListener('authSessionLoaded', () => {
-  console.log('app.js: authSessionLoaded event triggered');
-  try {
-    updateUserProfileDisplay();
-  } catch (error) {
-    console.error('app.js: Failed to update user profile display on event:', error);
-  }
-});
-
-/**
- * Initialize all core app shell layouts and settings
- */
-async function initializeAppShell() {
-  console.log('app.js: Starting App Shell initialization');
-
-  // 1. Render layout shell structure
-  try {
     renderLayoutShell();
   } catch (error) {
     console.error('app.js: Layout shell rendering crashed:', error);
   }
+});
 
-  // 2. Subscribe to Firebase settings (theme, currency, logo, etc.)
+// Watch for authentication session loads to update header profile details
+window.addEventListener('authSessionLoaded', async () => {
+  console.log('app.js: authSessionLoaded event triggered');
+  try {
+    updateUserProfileDisplay();
+    await initializeUserSessionData();
+  } catch (error) {
+    console.error('app.js: Failed to initialize user data on event:', error);
+  }
+});
+
+async function initializeUserSessionData() {
+  console.log('app.js: Starting User Data initialization');
+
+  // 1. Subscribe to Firebase settings (theme, currency, logo, etc.)
   try {
     subscribeToSettings();
   } catch (error) {
     console.error('app.js: Settings subscription crashed:', error);
   }
 
-  // 3. Subscribe to stock collection for alerts
+  // 2. Subscribe to stock collection for alerts
   try {
     subscribeToStockAlerts();
   } catch (error) {
     console.error('app.js: Stock alerts subscription crashed:', error);
   }
 
-  // 4. Perform tomorrow event reminder alert check
+  // 3. Perform tomorrow event reminder alert check
   try {
     await checkTomorrowEventAlert();
   } catch (error) {
     console.error('app.js: Tomorrow event alert check crashed:', error);
   }
 
-  console.log('app.js: App Shell initialization completed');
+  console.log('app.js: User Data initialization completed');
 }
 
 /**
@@ -259,7 +247,9 @@ function updateUserProfileDisplay() {
  * Subscribe to the 'settings/hall_settings' document in real-time
  */
 function subscribeToSettings() {
-  const docRef = doc(db, "settings", "hall_settings");
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  const docRef = doc(db, "users", userId, "settings", "hall_settings");
   
   onSnapshot(docRef, (docSnap) => {
     if (docSnap.exists()) {
@@ -340,8 +330,11 @@ function initNavbarInteractions() {
       const isDarkMode = activeTheme !== 'dark';
       
       try {
-        await updateDoc(doc(db, "settings", "hall_settings"), { darkMode: isDarkMode });
-        showToast('Thème mis à jour', `Mode ${isDarkMode ? 'sombre' : 'clair'} activé.`, 'info');
+        const userId = auth.currentUser?.uid;
+        if (userId) {
+          await updateDoc(doc(db, "users", userId, "settings", "hall_settings"), { darkMode: isDarkMode });
+          showToast('Thème mis à jour', `Mode ${isDarkMode ? 'sombre' : 'clair'} activé.`, 'info');
+        }
       } catch (err) {
         console.error("app.js: Error saving theme preference:", err);
       }
@@ -354,7 +347,9 @@ function initNavbarInteractions() {
  */
 let lowStockItemsList = [];
 function subscribeToStockAlerts() {
-  const stockRef = collection(db, "stock");
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  const stockRef = collection(db, "users", userId, "stock");
   
   onSnapshot(stockRef, (snapshot) => {
     lowStockItemsList = [];
@@ -391,11 +386,12 @@ function subscribeToStockAlerts() {
  */
 async function checkTomorrowEventAlert() {
   const tomorrowStr = "2026-07-01"; // Simulated tomorrow date for testing
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
   
   try {
     const q = query(
-      collection(db, "reservations"), 
-      where("eventDate", "==", tomorrowStr), 
+      collection(db, "users", userId, "reservations"), 
       where("status", "==", "Confirmé")
     );
     const snap = await getDocs(q);
@@ -403,9 +399,11 @@ async function checkTomorrowEventAlert() {
     if (!snap.empty) {
       snap.forEach(docSnap => {
         const res = docSnap.data();
-        setTimeout(() => {
-          showToast('Événement Demain', `Rappel: Réception ${res.eventType} pour ${res.clientName} prévue demain !`, 'info');
-        }, 2000);
+        if (res.startDate <= tomorrowStr && res.endDate >= tomorrowStr) {
+          setTimeout(() => {
+            showToast('Événement Demain', `Rappel: Réception ${res.eventType} pour ${res.clientName} prévue demain !`, 'info');
+          }, 2000);
+        }
       });
     }
   } catch (err) {

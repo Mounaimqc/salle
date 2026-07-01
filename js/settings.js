@@ -2,7 +2,7 @@
  * SallePro - Settings Page Logic (Firebase Firestore Module)
  */
 
-import { db } from "./firebase.js";
+import { db, auth } from "./firebase.js";
 import { showToast } from "./app.js";
 import {
   doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc, addDoc
@@ -43,8 +43,10 @@ async function initSettingsPage() {
  * Load current configurations into form inputs from Firestore
  */
 async function loadSettingsForm() {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
   try {
-    const docSnap = await getDoc(doc(db, "settings", "hall_settings"));
+    const docSnap = await getDoc(doc(db, "users", userId, "settings", "hall_settings"));
     if (docSnap.exists()) {
       const settings = docSnap.data();
       
@@ -149,8 +151,11 @@ async function handleSettingsSubmit(e) {
   const currency = currencyInput.value;
   const currencyName = currencyNameInput.value;
 
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+
   try {
-    const docRef = doc(db, "settings", "hall_settings");
+    const docRef = doc(db, "users", userId, "settings", "hall_settings");
     await setDoc(docRef, {
       hallName,
       address,
@@ -189,8 +194,11 @@ function initPreferencesToggles() {
       icon.className = isChecked ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
     }
 
+    const userId = auth.currentUser?.uid;
+    if (!userId) return;
+
     try {
-      await updateDoc(doc(db, "settings", "hall_settings"), { darkMode: isChecked });
+      await updateDoc(doc(db, "users", userId, "settings", "hall_settings"), { darkMode: isChecked });
       showToast('Thème mis à jour', `Mode ${newTheme === 'dark' ? 'sombre' : 'clair'} activé.`, 'info');
       window.dispatchEvent(new Event('themeChanged'));
     } catch (err) {
@@ -200,8 +208,10 @@ function initPreferencesToggles() {
 
   // Notification settings save
   notifToggle?.addEventListener('change', async () => {
+    const userId = auth.currentUser?.uid;
+    if (!userId) return;
     try {
-      await updateDoc(doc(db, "settings", "hall_settings"), { notifications: notifToggle.checked });
+      await updateDoc(doc(db, "users", userId, "settings", "hall_settings"), { notifications: notifToggle.checked });
       showToast('Préférences modifiées', 'Les réglages de notifications ont été enregistrés.', 'success');
     } catch (err) {
       showToast('Erreur', err.message, 'danger');
@@ -219,19 +229,20 @@ async function exportDatabaseBackup() {
     exportBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Exportation...';
   }
 
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+
   try {
-    const collectionsToBackup = ['users', 'clients', 'reservations', 'employees', 'stock', 'charges', 'settings'];
+    const collectionsToBackup = ['clients', 'reservations', 'employees', 'stock', 'expenses', 'settings'];
     const backupObj = {};
 
     for (const colName of collectionsToBackup) {
-      const querySnapshot = await getDocs(collection(db, colName));
+      const querySnapshot = await getDocs(collection(db, "users", userId, colName));
       const docs = [];
       querySnapshot.forEach(docSnap => {
         docs.push({ id: docSnap.id, ...docSnap.data() });
       });
-      // Map 'charges' to 'expenses' for compatibility with old local storage backups if any
-      const keyName = colName === 'charges' ? 'expenses' : colName;
-      backupObj[keyName] = docs;
+      backupObj[colName] = docs;
     }
 
     const jsonString = JSON.stringify(backupObj, null, 2);
@@ -265,15 +276,20 @@ async function importDatabaseBackup(e) {
   const file = e.target.files[0];
   if (!file) return;
 
+  const userId = auth.currentUser?.uid;
+  if (!userId) {
+    showToast('Erreur', 'Utilisateur non connecté.', 'danger');
+    return;
+  }
+
   const reader = new FileReader();
   reader.onload = async function(evt) {
     try {
       const data = JSON.parse(evt.target.result);
       
       // Validate schema
-      const requiredTables = ['users', 'clients', 'reservations', 'employees', 'stock', 'settings'];
       const hasExpenses = data.hasOwnProperty('expenses') || data.hasOwnProperty('charges');
-      const hasAllKeys = requiredTables.every(k => data.hasOwnProperty(k)) && hasExpenses;
+      const hasAllKeys = ['clients', 'reservations', 'employees', 'stock', 'settings'].every(k => data.hasOwnProperty(k)) && hasExpenses;
 
       if (!hasAllKeys) {
         showToast('Fichier invalide', 'Le format de sauvegarde n\'est pas reconnu par SallePro.', 'danger');
@@ -289,12 +305,11 @@ async function importDatabaseBackup(e) {
 
         const expensesData = data.expenses || data.charges || [];
         const collectionsMap = {
-          'users': data.users || [],
           'clients': data.clients || [],
           'reservations': data.reservations || [],
           'employees': data.employees || [],
           'stock': data.stock || [],
-          'charges': expensesData,
+          'expenses': expensesData,
           'settings': data.settings || []
         };
 
@@ -303,14 +318,14 @@ async function importDatabaseBackup(e) {
             const settingsDoc = Array.isArray(docsArray) ? docsArray.find(d => d.id === 'hall_settings') || docsArray[0] : docsArray;
             if (settingsDoc) {
               const { id, ...settingsFields } = settingsDoc;
-              await setDoc(doc(db, "settings", "hall_settings"), settingsFields);
+              await setDoc(doc(db, "users", userId, "settings", "hall_settings"), settingsFields);
             }
           } else {
             // Delete current documents
-            const currentSnap = await getDocs(collection(db, colName));
+            const currentSnap = await getDocs(collection(db, "users", userId, colName));
             const deletePromises = [];
             currentSnap.forEach(docSnap => {
-              deletePromises.push(deleteDoc(doc(db, colName, docSnap.id)));
+              deletePromises.push(deleteDoc(doc(db, "users", userId, colName, docSnap.id)));
             });
             await Promise.all(deletePromises);
 
@@ -319,9 +334,9 @@ async function importDatabaseBackup(e) {
             docsArray.forEach(d => {
               const { id, ...fields } = d;
               if (id) {
-                writePromises.push(setDoc(doc(db, colName, id), fields));
+                writePromises.push(setDoc(doc(db, "users", userId, colName, id), fields));
               } else {
-                writePromises.push(addDoc(collection(db, colName), fields));
+                writePromises.push(addDoc(collection(db, "users", userId, colName), fields));
               }
             });
             await Promise.all(writePromises);

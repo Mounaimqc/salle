@@ -2,13 +2,22 @@
  * SallePro - Clients CRM Page (Firebase Firestore Module)
  */
 
-import { db } from "./firebase.js";
+import { db, auth } from "./firebase.js";
 import { showToast, currentCurrencySymbol } from "./app.js";
 import {
   collection, query, orderBy, onSnapshot,
   addDoc, updateDoc, deleteDoc, doc,
   where, getDocs, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+// Helper to format date as DD/MM/YYYY
+function formatDateFR(dateStr) {
+  if (!dateStr) return '—';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const [year, month, day] = parts;
+  return `${day}/${month}/${year}`;
+}
 
 console.log('clients.js: Imports loaded successfully');
 
@@ -63,7 +72,9 @@ async function initClientsPage() {
 
 // ─── Firestore Listeners ───────────────────────────────────────────────────
 function listenToClients() {
-  const q = query(collection(db, "clients"), orderBy("createdAt", "desc"));
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  const q = query(collection(db, "users", userId, "clients"), orderBy("createdAt", "desc"));
   onSnapshot(q, (snapshot) => {
     allClients = [];
     snapshot.forEach(d => allClients.push({ id: d.id, ...d.data() }));
@@ -76,7 +87,9 @@ function listenToClients() {
 }
 
 function listenToReservations() {
-  onSnapshot(collection(db, "reservations"), (snapshot) => {
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+  onSnapshot(collection(db, "users", userId, "reservations"), (snapshot) => {
     allReservations = [];
     snapshot.forEach(d => allReservations.push({ id: d.id, ...d.data() }));
     // Refresh profile if one is selected
@@ -203,16 +216,16 @@ function showClientProfile(clientId) {
 
   const historyHtml = clientBookings.length === 0
     ? `<div style="font-size:0.85rem;color:var(--text-muted);text-align:center;padding:10px;">Aucun événement.</div>`
-    : [...clientBookings].sort((a, b) => (b.eventDate || '').localeCompare(a.eventDate || '')).map(res => {
+    : [...clientBookings].sort((a, b) => (b.startDate || '').localeCompare(a.startDate || '')).map(res => {
         const badge = res.status === 'Confirmé' ? 'badge-success' : res.status === 'Annulé' ? 'badge-danger' : 'badge-warning';
-        const d = res.eventDate ? new Date(res.eventDate).toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' }) : '—';
+        const d = res.startDate && res.endDate ? `Du ${formatDateFR(res.startDate)} au ${formatDateFR(res.endDate)}` : '—';
         return `
           <div style="background:var(--bg-app);border:1px solid var(--border-color);border-radius:var(--radius-sm);padding:10px;font-size:0.82rem;margin-bottom:8px;">
             <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
               <strong>${res.eventType || 'Événement'}</strong>
               <span class="badge ${badge}" style="font-size:0.7rem;padding:2px 8px;">${res.status || 'En attente'}</span>
             </div>
-            <div style="color:var(--text-muted);">Date: ${d} — ${(res.totalAmount||0).toLocaleString()} ${sym}</div>
+            <div style="color:var(--text-muted);">Période: ${d} — ${(res.totalAmount||0).toLocaleString()} ${sym}</div>
             ${res.remainingAmount > 0 ? `<div style="color:var(--danger);font-weight:600;">Reste: ${res.remainingAmount.toLocaleString()} ${sym}</div>` : ''}
           </div>`;
       }).join('');
@@ -305,13 +318,16 @@ async function handleFormSubmit(e) {
   const notes = notesEl ? notesEl.value.trim() : '';
   const payload = { name, phone, email, address, notes };
 
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
+
   try {
     if (editingId) {
-      await updateDoc(doc(db, "clients", editingId), payload);
+      await updateDoc(doc(db, "users", userId, "clients", editingId), payload);
       showToast('Client modifié', `${name} mis à jour.`, 'success');
     } else {
       payload.createdAt = serverTimestamp();
-      await addDoc(collection(db, "clients"), payload);
+      await addDoc(collection(db, "users", userId, "clients"), payload);
       showToast('Client créé', `${name} ajouté au CRM.`, 'success');
     }
     closeModal();
@@ -331,8 +347,10 @@ async function deleteClient(id) {
   }
 
   if (!confirm('Supprimer ce client définitivement ?')) return;
+  const userId = auth.currentUser?.uid;
+  if (!userId) return;
   try {
-    await deleteDoc(doc(db, "clients", id));
+    await deleteDoc(doc(db, "users", userId, "clients", id));
     if (selectedClientId === id) selectedClientId = null;
     showToast('Supprimé', `${c?.name || 'Client'} supprimé.`, 'success');
   } catch (err) {
